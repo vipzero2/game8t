@@ -1,0 +1,9 @@
+{
+ "name":"game8t",
+ "version":"1.0.0",
+ "private":true,
+ "type":"module",
+ "description":"AIM8 Cloudflare Pages + Pages Functions + D1",
+ "scripts":{"check":"node --test tests/*.test.mjs", "dev":"wrangler pages dev public", "db:local":"wrangler d1 execute aim8-db --local --file=./db/schema.sql", "db:remote":"wrangler d1 execute aim8-db --remote --file=./db/schema.sql"},
+ "devDependencies":{"wrangler":"^4.0.0"}
+}

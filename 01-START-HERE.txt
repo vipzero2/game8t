@@ -1,0 +1,32 @@
+AIM8.site — أهم 10 خطوات للنشر
+=================================
+
+هذا الملف يحتوي كود الموقع الجاهز، لكن الحسابات لا تعمل إلا بعد نشر Pages Functions وربط D1.
+الدفع مُغلق افتراضيًا (لا توجد أسعار حقيقية ولا مفتاح تاجر).
+
+1) فك ZIP إلى مجلد في الكمبيوتر.
+2) أنشئ GitHub Private repository باسم game8t، وارفع جميع الملفات والمجلدات (public/ functions/ db/ docs/ tests/).
+3) Cloudflare: Workers & Pages > Create > Pages > Connect GitHub > اختر المستودع.
+4) Build command: اتركه فارغًا. Build output: public. Root directory: فارغ. Branch: main.
+5) Cloudflare > D1 SQL Database > Create: aim8-db.
+6) Pages > Settings > Bindings > Add D1 > Variable name: DB > Database: aim8-db > Save > Redeploy.
+7) افتح PowerShell داخل مجلد المشروع:
+   npm install
+   npx wrangler login
+   npx wrangler d1 execute aim8-db --remote --file=./db/schema.sql
+8) Pages > Settings > Variables and Secrets:
+   SESSION_SECRET = مفتاح طويل عشوائي (Secret)
+   PAYMENTS_ENABLED = false
+   OXAPAY_SANDBOX = true
+   ولتوليد المفتاح: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+9) اختبر /api/config على رابط pages.dev. بعد نجاح الاختبار، اربط aim8.site من Pages > Custom domains.
+10) أنشئ حسابك على الموقع، ثم فعّل صلاحية admin له من D1 بعد التأكد من ملكية البريد.
+
+الأشياء المطلوبة منك لاحقًا:
+- حساب GitHub وحساب Cloudflare والشركة التي اشتريت منها aim8.site.
+- أسعار باقات 7/30/90 يومًا بالدولار.
+- Merchant API Key من OxaPay بعد قبول الخدمة (لا ترسله هنا).
+- رابط APK رسمي، ودمج الجهاز الواحد في تطبيق Android.
+- وسيلة تواصل دعم عامة وسياسات نهائية ورسائل تحقق البريد.
+
+اقرأ README.md للمسار الكامل والتحذيرات والأوامر التفصيلية.
