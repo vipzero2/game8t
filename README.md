@@ -54,6 +54,8 @@
    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
    ```
 
+   وأضف `PASSWORD_PEPPER` كـ **Secret مستقل** عن `SESSION_SECRET` (قيمة عشوائية مستقلة بطول 48 بايت). لا تغيّره بعد إنشاء الحسابات لأن كلمات المرور ستتوقف عن المطابقة.
+
    وأضف **`PAYMENTS_ENABLED=false`** كمتغير نصي، **`OXAPAY_SANDBOX=true`** للاختبار. أعد النشر.
 8. افتح رابط `*.pages.dev` الخاص بمشروعك؛ جرّب `https://YOUR-PROJECT.pages.dev/api/config`. يجب أن يعرض `"ok": true` و3 باقات (غير مفعلة).
 9. أضف النطاق `aim8.site`: Cloudflare → Add domain (إذا غير مضاف) → احصل على Nameservers من Cloudflare → استبدلها عند شركة شراء الدومين. من Pages → Custom domains → Add domain → `aim8.site` واتبع تعليمات Cloudflare الخاصة بسجلات DNS. فعّل HTTPS.
@@ -117,3 +119,8 @@ npx wrangler pages dev public --d1 DB=YOUR_D1_DATABASE_ID
 - الاعتماد الفعلي من بوابة OxaPay؛ الدفع مغلق تلقائيًا.
 
 هذه نسخة برمجية متكاملة للبداية، وليست ادعاء بأن الخدمة آمنة للإطلاق التجاري دون مراجعة واختبارات إنتاجية.
+
+
+## Cloudflare password hashing fix — 2026-11-08
+
+Password hashes use 100,000 PBKDF2-HMAC-SHA256 iterations (Cloudflare production limit) and a separate server-side HMAC pepper in the Cloudflare `PASSWORD_PEPPER` secret. Set this secret before registering users. Do not put the pepper in GitHub or regenerate it after creating accounts. Test registration/login in the deployed Pages Functions environment; 100k PBKDF2 may still exceed the 10ms CPU limit of Workers Free. If CPU is exceeded, use a paid Worker or a managed authentication service; do not weaken password hashing to work around CPU limits.

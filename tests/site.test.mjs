@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {onRequest} from '../functions/api/[[path]].js';
-import {hmac,base64url} from '../functions/_lib/common.js';
+import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.js';
 const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
 const DB={prepare(sql){return statement(sql)}};
-const env={DB,SESSION_SECRET:'this-is-a-long-random-example-secret-32-characters',PAYMENTS_ENABLED:'false',OXAPAY_SANDBOX:'true',OXAPAY_MERCHANT_KEY:''};
+const env={DB,SESSION_SECRET:'this-is-a-long-random-example-secret-32-characters',PASSWORD_PEPPER:'separate-password-pepper-secret-of-at-least-32-characters',PAYMENTS_ENABLED:'false',OXAPAY_SANDBOX:'true',OXAPAY_MERCHANT_KEY:''};
 const send=async(method,path,payload={},cookie='',headers={})=>{const req=new Request('https://aim8.site/api'+path,{method,headers:{...(method!=='GET'?{'content-type':'application/json',origin:'https://aim8.site'}:{}),...(cookie?{cookie}:{}),...headers},...(method!=='GET'?{body:JSON.stringify(payload)}:{})});const ans=await onRequest({request:req,env,params:{path:path.slice(1).split('/')}});let data;try{data=await ans.json()}catch{data=await ans.text()}return {ans,data}};
 let cookie='';let id='';let firstKey;
 test('schema seeds disabled and zero-priced plans',async()=>{const r=await send('GET','/config');assert.equal(r.ans.status,200);assert.equal(r.data.plans.length,3);assert.equal(r.data.paymentsEnabled,false);assert.equal(r.data.plans[0].enabled,false)});
@@ -27,3 +27,12 @@ const sig=Array.from(await hmac('test-only-merchant-key',payload,'SHA-512')).map
 
 test('user can open support ticket; admin replies privately',async()=>{const cust=await send('POST','/auth/login',{email:'customer@example.org',password:'another strong password example'});const customerCookie=cust.ans.headers.get('set-cookie').split(';')[0];const submitted=await send('POST','/support/ticket',{subject:'Please change device',message:'My Android smartphone is damaged and I need support.'},customerCookie);assert.equal(submitted.ans.status,201);const all=await send('GET','/admin/tickets',{},cookie);assert.equal(all.ans.status,200);assert.ok(all.data.tickets.some(x=>x.id===submitted.data.ticketId));const replied=await send('POST','/admin/reply-ticket',{ticketId:submitted.data.ticketId,reply:'We will verify ownership first.'},cookie);assert.equal(replied.ans.status,200);const mine=await send('GET','/support/mine',{},customerCookie);assert.equal(mine.ans.status,200);assert.equal(mine.data.tickets[0].status,'answered');});
 test('cross-site admin mutations are rejected',async()=>{const reply=await send('POST','/admin/grant',{userId:'x',days:30,reason:'normal request'},cookie,{'origin':'https://attacker.example','sec-fetch-site':'cross-site'});assert.equal(reply.ans.status,403)});
+
+test('production PBKDF2 iteration limit and secret pepper are enforced',async()=>{
+  const salt=randomToken(16);
+  const a=await hashPassword('test-password-here',salt,100000,env.PASSWORD_PEPPER);
+  const b=await hashPassword('test-password-here',salt,100000,'a-different-separate-long-password-pepper!');
+  assert.notEqual(a,b);
+  await assert.rejects(()=>hashPassword('test-password-here',salt,160000,env.PASSWORD_PEPPER),e=>e.code==='PASSWORD_HASH_CONFIG');
+  await assert.rejects(()=>hashPassword('test-password-here',salt,100000,''),e=>e.code==='CONFIG_MISSING');
+});
