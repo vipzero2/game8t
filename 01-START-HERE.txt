@@ -5,7 +5,7 @@ AIM8.site — أهم 10 خطوات للنشر
 الدفع مُغلق افتراضيًا (لا توجد أسعار حقيقية ولا مفتاح تاجر).
 
 1) فك ZIP إلى مجلد في الكمبيوتر.
-2) أنشئ GitHub Private repository باسم game8t، وارفع جميع الملفات والمجلدات (public/ functions/ db/ docs/ tests/).
+2) افتح المستودع الموجود https://github.com/vipzero2/game8t وغيّر Visibility إلى Private إن أمكن، ثم ارفع جميع ملفات ومجلدات المشروع إلى الجذر (public/ functions/ db/ docs/ tests/).
 3) Cloudflare: Workers & Pages > Create > Pages > Connect GitHub > اختر المستودع.
 4) Build command: اتركه فارغًا. Build output: public. Root directory: فارغ. Branch: main.
 5) Cloudflare > D1 SQL Database > Create: aim8-db.

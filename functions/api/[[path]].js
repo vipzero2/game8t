@@ -1,0 +1,29 @@
+import {ApiError,json,assertDb,siteOrigin,fail} from '../_lib/common.js';
+import * as auth from '../_lib/auth.js';
+import * as device from '../_lib/device.js';
+import * as payment from '../_lib/payments.js';
+import * as admin from '../_lib/admin.js';
+import * as support from '../_lib/support.js';
+const endpoints={
+ 'GET /config':payment.plans,
+ 'GET /auth/me':auth.me,
+ 'POST /auth/register':auth.register,
+ 'POST /auth/login':auth.login,
+ 'POST /auth/logout':auth.logout,
+ 'POST /device/login':auth.mobileLogin,
+ 'POST /device/challenge':device.challenge,
+ 'POST /device/activate':device.activate,
+ 'POST /device/verify':device.verify,
+ 'POST /orders':payment.createInvoice,
+ 'POST /payments/webhook':payment.webhook,
+ 'GET /support/mine':support.mine,
+ 'POST /support/ticket':support.submit,
+ 'GET /admin/tickets':support.adminList,
+ 'POST /admin/reply-ticket':support.reply,
+ 'GET /admin/overview':admin.overview,
+ 'POST /admin/reset-device':admin.resetDevice,
+ 'POST /admin/grant':admin.grant,
+ 'POST /admin/plan':admin.setPlan,
+ 'POST /admin/block':admin.block
+};
+export async function onRequest(ctx){try{assertDb(ctx.env);const url=new URL(ctx.request.url);const path='/'+(Array.isArray(ctx.params.path)?ctx.params.path.join('/'):(ctx.params.path||''));if(ctx.request.method!=='GET'&&path!=='/payments/webhook')siteOrigin(ctx.request);const fn=endpoints[ctx.request.method+' '+path];if(!fn)return json({ok:false,error:'NOT_FOUND',message:'المسار غير موجود'},404);return await fn(ctx);}catch(e){if(e instanceof ApiError)return json({ok:false,error:e.code,message:e.message},e.status);console.error('AIM8 API failed:',e?.message||e);return json({ok:false,error:'SERVER_ERROR',message:'حصل خطأ داخلي؛ تحقق من إعدادات السيرفر'},500)}}

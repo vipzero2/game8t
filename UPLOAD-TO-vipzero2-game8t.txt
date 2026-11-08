@@ -1,0 +1,23 @@
+رفع AIM8 إلى GitHub — المستودع الصحيح
+===================================
+Repository: https://github.com/vipzero2/game8t
+Git push URL: https://github.com/vipzero2/game8t.git
+
+الملفات هنا تتضمن الواجهة + functions + db. لا ترفع ملف ZIP نفسه.
+المستودع موجود لكن كان فارغًا وPublic عند الفحص. غيّره إلى Private إذا تريد حماية كودك (Settings > General > Change repository visibility).
+
+طريقة PowerShell (افتح الطرفية داخل المجلد الذي فككت به هذا ZIP):
+  git init
+  git add .
+  git commit -m "Initial AIM8 website"
+  git branch -M main
+  git remote add origin https://github.com/vipzero2/game8t.git
+  git push -u origin main
+
+إذا طلب GitHub تسجيل الدخول، استخدم حساب vipzero2 صاحب المستودع.
+لا ترفع أي كلمات مرور أو مفاتيح API داخل ملفات المشروع. أسرار Cloudflare تضاف من لوحة Cloudflare.
+
+بعد ظهور الملفات على GitHub:
+Cloudflare > Workers & Pages > Create > Pages > Connect to Git > vipzero2/game8t
+Framework: None | Build command: blank | Output: public | Branch: main
+مهم: الحسابات وAPI تحتاج D1 Binding + SESSION_SECRET + تطبيق db/schema.sql؛ اقرأ README.md.

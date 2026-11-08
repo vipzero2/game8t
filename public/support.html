@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080e1a"><meta name="color-scheme" content="dark">
+<meta name="description" content="لوحة حساب AIM8">
+<title>دعم AIM8</title><link rel="stylesheet" href="assets/style.css">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+</head><body data-page="support">
+<div class="notice-bar" id="siteNotice">AIM8 · الموقع قيد الإعداد — لا تدفع قبل ظهور فاتورة رسمية من OxaPay.</div>
+<header class="site-header"><div class="container nav">
+  <a class="brand" href="index.html" aria-label="AIM8 - الصفحة الرئيسية"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+  <nav class="nav-links" id="mainNav" aria-label="التنقل الرئيسي">
+    <a href="index.html" >الرئيسية</a><a href="index.html#features">المميزات</a><a href="index.html#pricing">الاشتراكات</a><a href="index.html#faq">الأسئلة الشائعة</a><a href="dashboard.html">لوحة المستخدم</a><a href="support.html">الدعم</a>
+  </nav>
+  <div class="nav-actions"><a class="textlink" href="auth.html">تسجيل الدخول</a><a class="btn small" href="index.html#pricing">احصل على اشتراك <span class="arrow">↗</span></a></div>
+  <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="mainNav" aria-label="فتح القائمة">☰</button>
+</div></header>
+<main><div class="container"><div class="page-top"><span class="eyebrow">مركز المساعدة</span><h1>الدعم الفني</h1><p>عندك مشكلة باشتراكك أو تحتاج تغيير جهاز؟ أرسل طلبًا من حسابك، وسيظهر رد الإدارة هنا.</p></div>
+<div class="two-cols inner-layout"><section class="glass"><h2>فتح طلب جديد</h2><form id="ticketForm"><div class="form-group"><label for="ticketSubject">عنوان المشكلة</label><input id="ticketSubject" minlength="5" maxlength="100" required placeholder="مثلاً: أريد تغيير الهاتف"></div><div class="form-group"><label for="ticketMessage">شرح المشكلة</label><textarea id="ticketMessage" minlength="12" maxlength="2000" rows="7" required placeholder="اذكر رقم الطلب إذا كان موجودًا، وما الذي حصل، بدون كلمة المرور"></textarea></div><button id="ticketSubmit" class="btn full" type="submit">إرسال الطلب</button><p class="form-note" id="supportStatus" aria-live="polite">يجب تسجيل الدخول قبل إرسال طلب. لا ترسل أي مفاتيح خاصة أو كلمات مرور.</p></form></section>
+<aside class="glass"><h2>طلباتي السابقة</h2><div id="ticketHistory"><p class="muted">جارٍ تحميل الطلبات...</p></div><div class="page-actions"><a class="btn ghost full" href="auth.html">تسجيل الدخول</a><a class="btn dark full" href="dashboard.html">لوحة حسابي</a></div></aside></div></div></main><footer class="footer"><div class="container"><div class="footer-main">
+<div><a class="brand" href="index.html"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+<p class="footer-desc">واجهة موقع مخصصة للاشتراك بإحدى أدوات خطوط التسديد والتصوّر البصري. الموقع مستقل وغير تابع أو معتمد من Miniclip أو 8 Ball Pool.</p>
+<span class="prelaunch">قيد التجهيز</span></div>
+<div><h4>الموقع</h4><a class="foot-link" href="index.html#features">المميزات</a><a class="foot-link" href="index.html#pricing">الباقات</a><a class="foot-link" href="index.html#faq">الأسئلة</a><a class="foot-link" href="dashboard.html">لوحة الحساب</a><a class="foot-link" href="support.html">الدعم</a></div>
+<div><h4>المعلومات</h4><a class="foot-link" href="terms.html">شروط الاستخدام (مسودة)</a><a class="foot-link" href="privacy.html">الخصوصية (مسودة)</a><a class="foot-link" href="refunds.html">الاسترجاع (مسودة)</a><a class="foot-link" href="auth.html">الدخول / التسجيل</a></div>
+</div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · aim8.site</span></div></div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
+<script src="assets/main.js" defer></script></body></html>

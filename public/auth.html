@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080e1a"><meta name="color-scheme" content="dark">
+<meta name="description" content="تسجيل الدخول وإنشاء حساب AIM8">
+<title>auth | AIM8</title><link rel="stylesheet" href="assets/style.css">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+</head><body data-page="auth">
+<div class="notice-bar" id="siteNotice">AIM8 · الموقع قيد الإعداد — لا تدفع قبل ظهور فاتورة رسمية من OxaPay.</div>
+<header class="site-header"><div class="container nav">
+  <a class="brand" href="index.html" aria-label="AIM8 - الصفحة الرئيسية"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+  <nav class="nav-links" id="mainNav" aria-label="التنقل الرئيسي">
+    <a href="index.html" >الرئيسية</a><a href="index.html#features">المميزات</a><a href="index.html#pricing">الاشتراكات</a><a href="index.html#faq">الأسئلة الشائعة</a><a href="dashboard.html">لوحة المستخدم</a><a href="support.html">الدعم</a>
+  </nav>
+  <div class="nav-actions"><a class="textlink" href="auth.html">تسجيل الدخول</a><a class="btn small" href="index.html#pricing">احصل على اشتراك <span class="arrow">↗</span></a></div>
+  <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="mainNav" aria-label="فتح القائمة">☰</button>
+</div></header>
+<main><div class="container"><div class="page-top" style="text-align:center"><span class="eyebrow">حساب AIM8</span><h1>أهلًا بيك في AIM8</h1><p style="margin-inline:auto">حساب واحد، اشتراك واحد، وجهاز Android واحد مرتبط بكل اشتراك.</p></div>
+<div class="form-wrap"><div class="glass"><div class="form-tabs"><button type="button" id="tabLogin" class="active" aria-pressed="true">تسجيل الدخول</button><button type="button" id="tabSignup" aria-pressed="false">إنشاء حساب</button></div>
+<form id="authForm"><div class="form-group" id="nameWrap" hidden><label for="userName">اسم العرض</label><input id="userName" name="name" type="text" autocomplete="nickname" maxlength="50" placeholder="مثلاً: لاعب AIM8"></div>
+<div class="form-group"><label for="email">البريد الإلكتروني</label><input id="email" name="email" type="email" autocomplete="email" required placeholder="name@example.com"></div>
+<div class="form-group"><label for="password">كلمة المرور</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="10" required placeholder="10 أحرف أو أكثر"></div>
+<div class="form-group" id="confirmWrap" hidden><label for="confirm">تأكيد كلمة المرور</label><input id="confirm" type="password" autocomplete="new-password" minlength="10" placeholder="أعد كتابة كلمة المرور"></div>
+<p id="authError" class="form-note" role="alert" aria-live="polite"></p><button type="submit" id="authSubmit" class="btn full">تسجيل الدخول ←</button>
+<p class="form-note">تُحفظ كلمات المرور بصيغة Hash داخل D1 بعد تشغيل السيرفر. ربط التطبيق بالجهاز يتم من داخل تطبيق Android، وليس المتصفح.</p></form>
+</div><div class="page-actions" style="justify-content:center"><a href="dashboard.html" class="btn ghost">اذهب إلى لوحة حسابك</a><a href="index.html" class="btn dark">الرجوع للرئيسية</a></div></div></div></main>
+<footer class="footer"><div class="container"><div class="footer-main">
+<div><a class="brand" href="index.html"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+<p class="footer-desc">واجهة موقع مخصصة للاشتراك بإحدى أدوات خطوط التسديد والتصوّر البصري. الموقع مستقل وغير تابع أو معتمد من Miniclip أو 8 Ball Pool.</p>
+<span class="prelaunch">قيد التجهيز</span></div>
+<div><h4>الموقع</h4><a class="foot-link" href="index.html#features">المميزات</a><a class="foot-link" href="index.html#pricing">الباقات</a><a class="foot-link" href="index.html#faq">الأسئلة</a><a class="foot-link" href="dashboard.html">لوحة الحساب</a><a class="foot-link" href="support.html">الدعم</a></div>
+<div><h4>المعلومات</h4><a class="foot-link" href="terms.html">شروط الاستخدام (مسودة)</a><a class="foot-link" href="privacy.html">الخصوصية (مسودة)</a><a class="foot-link" href="refunds.html">الاسترجاع (مسودة)</a><a class="foot-link" href="auth.html">الدخول / التسجيل</a></div>
+</div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · aim8.site</span></div></div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
+<script src="assets/main.js" defer></script></body></html>

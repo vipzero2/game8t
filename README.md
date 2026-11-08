@@ -34,7 +34,7 @@
 
 ## بداية سريعة: GitHub + Cloudflare
 
-1. افتح [GitHub](https://github.com/new) وأنشئ مستودعًا **Private** باسم `game8t` من دون README أولي، ثم ارفع **كل محتويات هذا المجلد** إلى جذر المستودع (أو استخدم Git؛ انظر أدناه). **لا ترفع مفاتيح حقيقية أو `.dev.vars` أو `.env`.**
+1. المستودع موجود مسبقًا على [vipzero2/game8t](https://github.com/vipzero2/game8t) وهو **Public** حاليًا؛ يفضّل تغييره إلى **Private** من Settings → General → Danger Zone → Change repository visibility، ثم ارفع **كل محتويات هذا المجلد** إلى جذر المستودع (أو استخدم Git؛ انظر أدناه). **لا ترفع مفاتيح حقيقية أو `.dev.vars` أو `.env`.**
 2. افتح [Cloudflare](https://dash.cloudflare.com/) → Workers & Pages → Create → Pages → Connect to Git. امنح Cloudflare وصولًا لهذا المستودع وحده، اختر `main`.
 3. إعدادات البناء: **Framework preset: None**؛ **Build command: اتركه فارغًا**؛ **Build output directory: `public`**؛ **Root directory: اتركه فارغًا (جذر المستودع)**. أنشئ المشروع.
 4. من Cloudflare → D1 SQL Database أنشئ قاعدة `aim8-db`.
@@ -85,7 +85,7 @@ git init
 git add .
 git commit -m "AIM8 website and backend v1"
 git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/game8t.git
+git remote add origin https://github.com/vipzero2/game8t.git
 git push -u origin main
 ```
 
