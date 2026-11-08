@@ -38,3 +38,48 @@ export async function verifySignedToken(env,token){if(!token||token.length>4096)
 export async function currentUser(ctx){const token=getCookie(ctx.request);if(!token)fail('UNAUTHORIZED','يرجى تسجيل الدخول',401);const record=await ctx.env.DB.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(await sha256(token),now()).first();if(!record)fail('UNAUTHORIZED','انتهت الجلسة، سجل دخول من جديد',401);if(record.blocked)fail('ACCOUNT_BLOCKED','الحساب موقوف',403);return record;}
 export async function requireAdmin(ctx){const u=await currentUser(ctx);if(u.role!=='admin')fail('FORBIDDEN','ليس لديك صلاحية',403);return u;}
 export async function checkPassword(row,password,pepper){const hashed=await hashPassword(password,row.password_salt,row.password_iterations,pepper);return constantTime(unbase64url(hashed),unbase64url(row.password_hash));}
+
+
+// Cloudflare Pages on Workers Free has a 10 ms CPU budget. Offload strong
+// PBKDF2 hashing to a separately deployed SQLite-backed Durable Object.
+export function assertHasherReady(env){
+  if(env.DIRECT_HASH_IN_TEST===true){
+    if(!env.PASSWORD_PEPPER||env.PASSWORD_PEPPER.length<32)fail('CONFIG_MISSING','مفتاح حماية الاختبار غير مضبوط',503);
+    return;
+  }
+  if(!env.AUTH_HASHER)fail('HASHER_NOT_CONFIGURED','خدمة تشفير الحسابات غير مربوطة؛ أضف AUTH_HASHER إلى Pages',503);
+}
+export async function hashPasswordForUser(env,password,salt,iterations=100000){
+  assertHasherReady(env);
+  if(!Number.isInteger(iterations)||iterations!==100000)fail('PASSWORD_HASH_CONFIG','إعداد التشفير غير مدعوم',503);
+  if(env.DIRECT_HASH_IN_TEST===true)return hashPassword(password,salt,iterations,env.PASSWORD_PEPPER);
+  const objectId=env.AUTH_HASHER.idFromName('password-hashing-v1');
+  let response;
+  try{
+    response=await env.AUTH_HASHER.get(objectId).fetch('https://aim8-hasher.internal/hash',{
+      method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({password,salt,iterations})
+    });
+  }catch(err){console.error('Password hasher binding failed:',err?.message||err);fail('HASHER_UNAVAILABLE','خدمة تشفير كلمات المرور غير متاحة حاليًا',503)}
+  if(!response.ok){
+    const code=response.status===503?'HASHER_NOT_CONFIGURED':'HASHER_UNAVAILABLE';
+    console.error('Password hasher refused operation:',response.status);
+    fail(code,'تعذر التحقق من كلمة المرور؛ راجع إعدادات AUTH_HASHER وPASSWORD_PEPPER',503)
+  }
+  let data;
+  try{data=await response.json()}catch{fail('HASHER_UNAVAILABLE','استجابة خدمة التشفير غير صحيحة',503)}
+  if(!data||typeof data.hash!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(data.hash))fail('HASHER_UNAVAILABLE','استجابة خدمة التشفير غير صحيحة',503);
+  return data.hash;
+}
+export async function checkPasswordForUser(env,row,password){
+  const hashed=await hashPasswordForUser(env,password,row.password_salt,row.password_iterations);
+  return constantTime(unbase64url(hashed),unbase64url(row.password_hash));
+}
+// Forgive login/signup rate counter for unexpected server-side failures.
+export async function refundRateLimitOnServerFailure(env,rawKey,error){
+  if(error instanceof ApiError&&error.status<500)return;
+  try{
+    const key=base64url(await hmac(env.SESSION_SECRET,'rate:'+rawKey));
+    await env.DB.prepare('UPDATE rate_limits SET count=MAX(0,count-1) WHERE key=?').bind(key).run();
+  }catch(ex){console.error('Could not refund failed auth attempt:',ex?.message||ex)}
+}

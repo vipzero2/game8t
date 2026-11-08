@@ -124,3 +124,7 @@ npx wrangler pages dev public --d1 DB=YOUR_D1_DATABASE_ID
 ## Cloudflare password hashing fix — 2026-11-08
 
 Password hashes use 100,000 PBKDF2-HMAC-SHA256 iterations (Cloudflare production limit) and a separate server-side HMAC pepper in the Cloudflare `PASSWORD_PEPPER` secret. Set this secret before registering users. Do not put the pepper in GitHub or regenerate it after creating accounts. Test registration/login in the deployed Pages Functions environment; 100k PBKDF2 may still exceed the 10ms CPU limit of Workers Free. If CPU is exceeded, use a paid Worker or a managed authentication service; do not weaken password hashing to work around CPU limits.
+
+## Cloudflare Free authentication fix
+
+**Required:** deploy the SQLite-backed Durable Object password hashing service and bind `AUTH_HASHER` to Pages. Detailed instructions: [`docs/AUTH-HASHER-SETUP.md`](docs/AUTH-HASHER-SETUP.md). On free Pages Workers 100k PBKDF2 can exceed 10ms CPU. No weakening of hashing is used.

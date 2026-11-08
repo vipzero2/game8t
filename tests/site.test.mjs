@@ -4,10 +4,11 @@ import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {onRequest} from '../functions/api/[[path]].js';
 import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.js';
+import {PasswordHasher} from '../auth-hasher/src/index.js';
 const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
 const DB={prepare(sql){return statement(sql)}};
-const env={DB,SESSION_SECRET:'this-is-a-long-random-example-secret-32-characters',PASSWORD_PEPPER:'separate-password-pepper-secret-of-at-least-32-characters',PAYMENTS_ENABLED:'false',OXAPAY_SANDBOX:'true',OXAPAY_MERCHANT_KEY:''};
+const env={DB,SESSION_SECRET:'this-is-a-long-random-example-secret-32-characters',PASSWORD_PEPPER:'separate-password-pepper-secret-of-at-least-32-characters',DIRECT_HASH_IN_TEST:true,PAYMENTS_ENABLED:'false',OXAPAY_SANDBOX:'true',OXAPAY_MERCHANT_KEY:''};
 const send=async(method,path,payload={},cookie='',headers={})=>{const req=new Request('https://aim8.site/api'+path,{method,headers:{...(method!=='GET'?{'content-type':'application/json',origin:'https://aim8.site'}:{}),...(cookie?{cookie}:{}),...headers},...(method!=='GET'?{body:JSON.stringify(payload)}:{})});const ans=await onRequest({request:req,env,params:{path:path.slice(1).split('/')}});let data;try{data=await ans.json()}catch{data=await ans.text()}return {ans,data}};
 let cookie='';let id='';let firstKey;
 test('schema seeds disabled and zero-priced plans',async()=>{const r=await send('GET','/config');assert.equal(r.ans.status,200);assert.equal(r.data.plans.length,3);assert.equal(r.data.paymentsEnabled,false);assert.equal(r.data.plans[0].enabled,false)});
@@ -35,4 +36,33 @@ test('production PBKDF2 iteration limit and secret pepper are enforced',async()=
   assert.notEqual(a,b);
   await assert.rejects(()=>hashPassword('test-password-here',salt,160000,env.PASSWORD_PEPPER),e=>e.code==='PASSWORD_HASH_CONFIG');
   await assert.rejects(()=>hashPassword('test-password-here',salt,100000,''),e=>e.code==='CONFIG_MISSING');
+});
+
+test('server side errors do not consume account registration quota',async()=>{
+  const r=await send('POST','/auth/register',{name:'Tester2',email:'tmp@example.org',password:'strong-second-password-example'});
+  assert.equal(r.ans.status,201);
+  const before=db0.prepare('SELECT count FROM rate_limits').all();
+  const original=env.DIRECT_HASH_IN_TEST;
+  env.DIRECT_HASH_IN_TEST=false;
+  try{
+    const e=await send('POST','/auth/register',{name:'Tester3',email:'tmp3@example.org',password:'strong-third-password-example'});
+    assert.equal(e.ans.status,503);
+    assert.equal(e.data.error,'HASHER_NOT_CONFIGURED');
+  }finally{env.DIRECT_HASH_IN_TEST=original}
+  assert.deepEqual(db0.prepare('SELECT count FROM rate_limits').all(),before);
+});
+
+test('Durable Object hashes match local hardened algorithm and reject invalid inputs',async()=>{
+  const service=new PasswordHasher({}, {PASSWORD_PEPPER:env.PASSWORD_PEPPER});
+  const password='a safe test password';
+  const salt=randomToken(16);
+  const result=await service.fetch(new Request('https://aim8-hasher.internal/hash',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password,salt,iterations:100000})}));
+  assert.equal(result.status,200);
+  const payload=await result.json();
+  const expected=await hashPassword(password,salt,100000,env.PASSWORD_PEPPER);
+  assert.equal(payload.hash,expected);
+  const bad=await service.fetch(new Request('https://aim8-hasher.internal/hash',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password,salt:'not-salt',iterations:100000})}));
+  assert.equal(bad.status,400);
+  const noSecret=await new PasswordHasher({},{}).fetch(new Request('https://aim8-hasher.internal/hash',{method:'POST',body:JSON.stringify({password,salt,iterations:100000})}));
+  assert.equal(noSecret.status,503);
 });

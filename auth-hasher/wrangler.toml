@@ -1,0 +1,12 @@
+name = "game8t-auth-hasher"
+main = "src/index.js"
+compatibility_date = "2026-11-08"
+workers_dev = false
+
+[[durable_objects.bindings]]
+name = "HASHER"
+class_name = "PasswordHasher"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PasswordHasher"]
