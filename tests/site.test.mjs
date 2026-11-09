@@ -74,3 +74,45 @@ test('only Gmail signups are accepted',async()=>{
  const r=await send('POST','/auth/register',{name:'Account',email:'account@example.com',password:'long-password-test'});
  assert.equal(r.ans.status,400);assert.equal(r.data.error,'GMAIL_ONLY');
 });
+
+test('verified Gmail account can reset password and invalidate prior web sessions',async()=>{
+ const before=await send('GET','/auth/me',{},cookie);
+ assert.equal(before.ans.status,200);
+ assert.equal(before.data.user.emailVerified,false);
+ const requested=await send('POST','/auth/email/request',{},cookie);
+ assert.equal(requested.ans.status,200);
+ const confirmed=await send('POST','/auth/email/verify',{code:latestEmailCode},cookie);
+ assert.equal(confirmed.ans.status,200);
+ const asked=await send('POST','/auth/password/request',{email:'tester@gmail.com'});
+ assert.equal(asked.ans.status,200);
+ const reset=await send('POST','/auth/password/reset',{email:'tester@gmail.com',code:latestEmailCode,newPassword:'new-password-strong-2026'});
+ assert.equal(reset.ans.status,200);
+ const revoked=await send('GET','/auth/me',{},cookie);
+ assert.equal(revoked.ans.status,401);
+ const old=await send('POST','/auth/login',{email:'tester@gmail.com',password:'correct horse battery staple'});
+ assert.equal(old.ans.status,401);
+ const fresh=await send('POST','/auth/login',{email:'tester@gmail.com',password:'new-password-strong-2026'});
+ assert.equal(fresh.ans.status,200);
+});
+
+test('Gmail verified owner may release device without changing subscription',async()=>{
+ const login=await send('POST','/auth/login',{email:'customer@gmail.com',password:'another strong password example'});
+ assert.equal(login.ans.status,200);
+ const c=login.ans.headers.get('set-cookie').split(';')[0];
+ const first=await send('POST','/auth/email/request',{},c);
+ assert.equal(first.ans.status,200);
+ const verified=await send('POST','/auth/email/verify',{code:latestEmailCode},c);
+ assert.equal(verified.ans.status,200);
+ const before=await send('GET','/auth/me',{},c);
+ assert.equal(before.data.user.deviceBound,true);
+ const until=before.data.user.subscriptionUntil;
+ const ask=await send('POST','/device/change/request',{},c);
+ assert.equal(ask.ans.status,200);
+ const changed=await send('POST','/device/change/confirm',{code:latestEmailCode},c);
+ assert.equal(changed.ans.status,200);
+ const after=await send('GET','/auth/me',{},c);
+ assert.equal(after.data.user.deviceBound,false);
+ assert.equal(after.data.user.subscriptionUntil,until);
+ const cannotVerifyOld=await send('POST','/device/verify',{email:'customer@gmail.com',challengeId:'anything',signature:'not-real'});
+ assert.equal(cannotVerifyOld.ans.status,403);
+});
