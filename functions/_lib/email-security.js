@@ -1,4 +1,4 @@
-import {body,now,uid,randomToken,fail,json,currentUser,rateLimit,hmac,base64url,constantTime,enc,hashPasswordForUser,assertHasherReady,setSession} from './common.js';
+import {body,now,uid,randomToken,fail,json,currentUser,rateLimit,refundRateLimitOnServerFailure,hmac,base64url,constantTime,enc,hashPasswordForUser,assertHasherReady,setSession} from './common.js';
 
 // Gmail addresses only. This checks the domain; email ownership is proven by an OTP.
 export function normalizeGmail(input){
@@ -36,8 +36,10 @@ async function issueCode(ctx,email,purpose){
  const env=ctx.env;
  assertMailer(env);
  const ip=ctx.request.headers.get('CF-Connecting-IP')||'local';
- await rateLimit(env,'email-ip:'+ip,15,3600);
- await rateLimit(env,'email-address:'+email+':'+purpose,4,3600);
+ const ipKey='email-ip:'+ip, addressKey='email-address:'+email+':'+purpose;
+ await rateLimit(env,ipKey,15,3600);
+ try{ await rateLimit(env,addressKey,4,3600); }catch(err){ await refundRateLimitOnServerFailure(env,ipKey,err);throw err; }
+ try{
  const old=await env.DB.prepare('SELECT cooldown_until FROM email_security_codes WHERE email=? AND purpose=?').bind(email,purpose).first();
  if(old?.cooldown_until>now())fail('EMAIL_COOLDOWN','انتظر دقيقة قبل طلب رمز آخر',429);
  const code=makeSixDigits();
@@ -47,6 +49,7 @@ async function issueCode(ctx,email,purpose){
  ON CONFLICT(email,purpose) DO UPDATE SET code_hash=excluded.code_hash,attempts=0,expires_at=excluded.expires_at,cooldown_until=excluded.cooldown_until,consumed_at=NULL`)
  .bind(email,purpose,await hashCode(env,email,purpose,code),now()+600,now()+60).run();
  return json({ok:true,expiresIn:600,message:'إذا كان البريد مؤهلًا، أرسلنا رمزًا من 6 أرقام'});
+ }catch(err){await refundRateLimitOnServerFailure(env,ipKey,err);await refundRateLimitOnServerFailure(env,addressKey,err);throw err}
 }
 async function consumeCode(env,email,purpose,code){
  if(!/^\d{6}$/.test(String(code||'')))fail('INVALID_CODE','أدخل رمز التحقق المكوّن من 6 أرقام',400);
@@ -69,7 +72,9 @@ export async function startSignup(ctx){
  const existing=await ctx.env.DB.prepare('SELECT id FROM users WHERE email=?').bind(email).first();
  if(existing)fail('EMAIL_EXISTS','هذا البريد مسجل مسبقًا',409);
  const ip=ctx.request.headers.get('CF-Connecting-IP')||'local';
- await rateLimit(ctx.env,'signup:'+ip,5,3600);
+ const signupRate='signup:'+ip;
+ await rateLimit(ctx.env,signupRate,5,3600);
+ try{
  const salt=randomToken(16),hash=await hashPasswordForUser(ctx.env,password,salt,100000);
  const t=now();
  await ctx.env.DB.prepare(`INSERT INTO pending_signups(email,name,password_hash,password_salt,password_iterations,created_at,expires_at)
@@ -77,6 +82,12 @@ export async function startSignup(ctx){
  ON CONFLICT(email) DO UPDATE SET name=excluded.name,password_hash=excluded.password_hash,password_salt=excluded.password_salt,
  password_iterations=excluded.password_iterations,created_at=excluded.created_at,expires_at=excluded.expires_at`)
  .bind(email,name,hash,salt,100000,t,t+600).run();
+ return await issueCode(ctx,email,'signup');
+ }catch(err){await refundRateLimitOnServerFailure(ctx.env,signupRate,err);throw err}
+}
+export async function resendSignup(ctx){const d=await body(ctx.request),email=normalizeGmail(d.email);
+ const p=await ctx.env.DB.prepare('SELECT email FROM pending_signups WHERE email=? AND expires_at>?').bind(email,now()).first();
+ if(!p)fail('SIGNUP_EXPIRED','انتهت مهلة التسجيل؛ ابدأ من جديد',400);
  return issueCode(ctx,email,'signup');
 }
 export async function verifySignup(ctx){

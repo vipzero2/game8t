@@ -1,0 +1,17 @@
+name: AIM8 Node tests
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit
+      - run: npm run check
+      - run: node --check public/assets/main.js
+      - run: node --check functions/_lib/email-security.js

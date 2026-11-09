@@ -10,6 +10,7 @@ const endpoints={
  'GET /auth/me':auth.me,
  'POST /auth/register':emailSecurity.startSignup,
  'POST /auth/signup/verify':emailSecurity.verifySignup,
+ 'POST /auth/signup/resend':emailSecurity.resendSignup,
  'POST /auth/email/request':emailSecurity.requestVerifyEmail,
  'POST /auth/email/verify':emailSecurity.confirmVerifyEmail,
  'POST /auth/password/request':emailSecurity.requestPasswordReset,
