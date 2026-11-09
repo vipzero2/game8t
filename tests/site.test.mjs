@@ -78,11 +78,7 @@ test('only Gmail signups are accepted',async()=>{
 test('verified Gmail account can reset password and invalidate prior web sessions',async()=>{
  const before=await send('GET','/auth/me',{},cookie);
  assert.equal(before.ans.status,200);
- assert.equal(before.data.user.emailVerified,false);
- const requested=await send('POST','/auth/email/request',{},cookie);
- assert.equal(requested.ans.status,200);
- const confirmed=await send('POST','/auth/email/verify',{code:latestEmailCode},cookie);
- assert.equal(confirmed.ans.status,200);
+ assert.equal(before.data.user.emailVerified,true); // new accounts verify Gmail during signup
  const asked=await send('POST','/auth/password/request',{email:'tester@gmail.com'});
  assert.equal(asked.ans.status,200);
  const reset=await send('POST','/auth/password/reset',{email:'tester@gmail.com',code:latestEmailCode,newPassword:'new-password-strong-2026'});
