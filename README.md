@@ -128,3 +128,8 @@ Password hashes use 100,000 PBKDF2-HMAC-SHA256 iterations (Cloudflare production
 ## Cloudflare Free authentication fix
 
 **Required:** deploy the SQLite-backed Durable Object password hashing service and bind `AUTH_HASHER` to Pages. Detailed instructions: [`docs/AUTH-HASHER-SETUP.md`](docs/AUTH-HASHER-SETUP.md). On free Pages Workers 100k PBKDF2 can exceed 10ms CPU. No weakening of hashing is used.
+
+
+## Gmail-only recovery and changing device
+
+See [docs/EMAIL-SECURITY.md](docs/EMAIL-SECURITY.md) for the D1 production migration and Resend setup. A verified Gmail code is required for registration, password reset and device transfer. Email delivery is disabled until Resend variables are set.
