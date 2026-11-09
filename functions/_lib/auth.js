@@ -33,6 +33,6 @@ export async function register(ctx){
   }catch(e){await refundRateLimitOnServerFailure(ctx.env,limitKey,e);throw e}
 }
 export async function login(ctx){const u=await authenticate(ctx,await body(ctx.request));return json({ok:true,user:safeUser(u)},200,{'set-cookie':await setSession(ctx.env,u.id)});}
-export async function mobileLogin(ctx){const u=await authenticate(ctx,await body(ctx.request));if(u.subscription_until<=now())fail('SUBSCRIPTION_REQUIRED','الاشتراك غير نشط',403);return json({ok:true,activationToken:await signedToken(ctx.env,u.id),expiresIn:300,deviceBound:!!u.device_public_key});}
+export async function mobileLogin(ctx){const u=await authenticate(ctx,await body(ctx.request));if(!u.email_verified)fail('EMAIL_UNVERIFIED','أكد بريد Gmail من الموقع أولًا',403);if(u.subscription_until<=now())fail('SUBSCRIPTION_REQUIRED','الاشتراك غير نشط',403);return json({ok:true,activationToken:await signedToken(ctx.env,u.id,u.device_generation||0),expiresIn:300,deviceBound:!!u.device_public_key});}
 export async function me(ctx){const u=await currentUser(ctx);const orders=(await ctx.env.DB.prepare('SELECT id,plan_id,amount_cents,status,created_at,paid_at,payment_url FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 20').bind(u.id).all()).results;return json({ok:true,user:safeUser(u),orders});}
 export async function logout(ctx){const tok=getCookie(ctx.request);if(tok)await ctx.env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(tok)).run();return json({ok:true},200,{'set-cookie':cookie('',0)});}

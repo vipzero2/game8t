@@ -4,10 +4,18 @@ import * as device from '../_lib/device.js';
 import * as payment from '../_lib/payments.js';
 import * as admin from '../_lib/admin.js';
 import * as support from '../_lib/support.js';
+import * as emailSecurity from '../_lib/email-security.js';
 const endpoints={
  'GET /config':payment.plans,
  'GET /auth/me':auth.me,
- 'POST /auth/register':auth.register,
+ 'POST /auth/register':emailSecurity.startSignup,
+ 'POST /auth/signup/verify':emailSecurity.verifySignup,
+ 'POST /auth/email/request':emailSecurity.requestVerifyEmail,
+ 'POST /auth/email/verify':emailSecurity.confirmVerifyEmail,
+ 'POST /auth/password/request':emailSecurity.requestPasswordReset,
+ 'POST /auth/password/reset':emailSecurity.confirmPasswordReset,
+ 'POST /device/change/request':emailSecurity.requestDeviceChange,
+ 'POST /device/change/confirm':emailSecurity.confirmDeviceChange,
  'POST /auth/login':auth.login,
  'POST /auth/logout':auth.logout,
  'POST /device/login':auth.mobileLogin,
