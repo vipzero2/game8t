@@ -172,7 +172,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
     assert.ok(linkedPicker,'A plan picker should appear inside the bot');
     assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data),['buy:quarter']);
-    const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE user_id=? ORDER BY created_at DESC LIMIT 1').get(target.id);
+    const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE token_hash=?').get(await sha256(token));
     assert.equal(dbLink.plan_id,'quarter'); // legacy schema placeholder only
     assert.ok(dbLink.used_at);
     assert.equal((await event({callback_query:{id:'linked-plan-choice',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}})).status,200);
