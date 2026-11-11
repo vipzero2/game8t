@@ -68,7 +68,27 @@ function selectUser(u){selected=u;$('targetId').value=u.id;$('targetEmail').valu
 function addCell(row,value){row.append(el('td',value));}
 function renderUsers(){const q=$('userSearch').value.trim().toLowerCase(),tbody=$('adminUsers');tbody.replaceChildren();users.filter(u=>(u.email+' '+u.name).toLowerCase().includes(q)).forEach(u=>{const tr=el('tr');addCell(tr,u.name+'\n'+u.email);addCell(tr,u.subscriptionUntil>Math.floor(Date.now()/1000)?'نشط حتى '+fmtTime(u.subscriptionUntil):'غير نشط');addCell(tr,u.deviceBound?'مرتبط':'بدون جهاز');addCell(tr,u.blocked?'محظور':u.role==='admin'?'مدير':'مسموح');const td=el('td'),b=el('button','اختيار','btn ghost small');b.type='button';b.addEventListener('click',()=>selectUser(u));td.append(b);tr.append(td);tbody.append(tr)})}
 function renderPlans(plans){const node=$('adminPlans');node.replaceChildren();plans.forEach(p=>{const wrap=el('div',null,'admin-plan');const title=el('strong',p.name+' · '+p.days+' أيام');const field=el('input');field.type='number';field.min='0';field.step='0.01';field.value=(p.price_cents/100).toFixed(2);field.setAttribute('aria-label','السعر بالدولار للباقة '+p.name);const toggle=el('input');toggle.type='checkbox';toggle.checked=!!p.enabled;const label=el('label','تفعيل البيع');label.prepend(toggle);const btn=el('button','حفظ الباقة','btn small');btn.type='button';btn.addEventListener('click',async()=>{setBusy(btn,true);try{await post('/admin/plan',{id:p.id,priceCents:Math.round(Number(field.value)*100),enabled:toggle.checked});showToast('تم حفظ باقة '+p.name)}catch(err){openDialog('خطأ حفظ الباقة',err.message)}finally{setBusy(btn,false)}});wrap.append(title,field,label,btn);node.append(wrap)})}
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+function renderStarsAdmin(plans){
+ const root=$('adminStarsPlans');if(!root)return;root.replaceChildren();
+ plans.forEach(p=>{
+  const wrap=el('div',null,'admin-plan');
+  const heading=el('strong',p.name+' · '+p.days+' يوم');
+  const input=el('input');input.type='number';input.min='0';input.max='100000';input.step='1';input.value=p.stars_price||0;input.setAttribute('aria-label','سعر النجوم: '+p.name);
+  const check=el('input');check.type='checkbox';check.checked=!!p.stars_enabled;
+  const label=el('label','تفعيل البيع بالنجوم');label.prepend(check);
+  const save=el('button','حفظ سعر النجوم','btn small');save.type='button';
+  save.addEventListener('click',async()=>{setBusy(save,true);try{
+    await post('/admin/telegram/plan',{id:p.id,starsPrice:Number(input.value),enabled:check.checked});
+    showToast('تم تحديث سعر النجوم');
+  }catch(e){openDialog('خطأ في سعر النجوم',e.message)}finally{setBusy(save,false)}});
+  wrap.append(heading,input,label,save);root.append(wrap);
+ });
+ $('adminTelegramWebhook')?.addEventListener('click',async()=>{const btn=$('adminTelegramWebhook');setBusy(btn,true,'جارٍ الربط...');
+ try{const data=await post('/admin/telegram/configure',{});
+ $('adminTelegramStatus').textContent='تم تسجيل Webhook على: '+data.webhookUrl;
+ }catch(e){$('adminTelegramStatus').textContent=e.message;}finally{setBusy(btn,false)}});
+}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(msg+'\nالمستخدم: '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}
 $('adminReset').addEventListener('click',()=>doAction('/admin/reset-device',{},'فك ربط جهاز المستخدم؟'));
