@@ -115,3 +115,30 @@ test('Free recovery cannot be claimed without any paid entitlement or forged Tel
   assert.equal(x.db.prepare('SELECT COUNT(*) n FROM telegram_device_codes').get().n,0);
  }finally{x.restore()}
 });
+
+test('Telegram purchase replay cannot expose an old code after free replacement',async()=>{
+ const x=fixture();
+ try{
+  const tgId=7100123;
+  const sender={id:tgId,language_code:'en'};
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,text:'/start'}});
+  await x.bot({callback_query:{id:'lang-initial-en',from:sender,message:{chat:{id:tgId,type:'private'}},data:'lang:en'}});
+  await x.bot({callback_query:{id:'buy-en-code',from:sender,message:{chat:{id:tgId,type:'private'}},data:'buy:quarter'}});
+  const oid=x.calls.filter(c=>c.method==='sendInvoice').at(-1).data.payload;
+  const payment={invoice_payload:oid,currency:'XTR',total_amount:150,telegram_payment_charge_id:'replay-charge-7100123'};
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,successful_payment:payment}});
+  const first=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  assert.match(first.text,/Never share it/);
+  assert.match(first.text,/one device only/);
+  const firstCode=first.reply_markup.inline_keyboard[0][0].copy_text.text;
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,text:'/recover'}});
+  await x.bot({callback_query:{id:'recover-before-activation',from:sender,message:{chat:{id:tgId,type:'private'}},data:'recover:confirm'}});
+  const replacement=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  const secondCode=replacement.reply_markup.inline_keyboard[0][0].copy_text.text;
+  assert.notEqual(secondCode,firstCode);
+  const sentBefore=x.calls.filter(c=>c.method==='sendMessage').length;
+  assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,successful_payment:payment}})).status,200);
+  assert.equal(x.calls.filter(c=>c.method==='sendMessage').length,sentBefore,'duplicate webhook must not leak the old code');
+  assert.equal(x.db.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'paid');
+ }finally{x.restore()}
+});
