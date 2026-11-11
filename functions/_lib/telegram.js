@@ -109,7 +109,7 @@ async function onStart(env, message, token) {
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
     if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.');
-    const plans = (await env.DB.prepare('SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days').all()).results;
+    const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
     if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.');
     return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
       inline_keyboard: plans.map(p => [{ text: p.name + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
