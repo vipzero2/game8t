@@ -19,6 +19,12 @@ function bootstrap(page='home',status=200){
     botActivateHome:elem('botActivateHome'),
     botLinkBackupHome:elem('botLinkBackupHome'),
     botLaunchStatusHome:elem('botLaunchStatusHome','P'),
+    botPairingHome:elem('botPairingHome','DIV'),
+    botPairCodeHome:elem('botPairCodeHome','INPUT'),
+    botCopyHome:elem('botCopyHome','BUTTON'),
+    botPairingDash:elem('botPairingDash','DIV'),
+    botPairCodeDash:elem('botPairCodeDash','INPUT'),
+    botCopyDash:elem('botCopyDash','BUTTON'),
     starsStart:elem('starsStart'),
     botLinkBackupDash:elem('botLinkBackupDash'),
     starsRedeem:elem('starsRedeem','BUTTON'),
@@ -34,7 +40,7 @@ function bootstrap(page='home',status=200){
     fetch:async(url)=>{
       requested++;
       if(status!==200)return Response.json({ok:false,error:'UNAUTHORIZED',message:'يرجى تسجيل الدخول'}, {status});
-      return Response.json({ok:true,url:'https://t.me/AIM8_test_bot?start=012345678901234567890123',expiresIn:600});
+      return Response.json({ok:true,url:'https://t.me/AIM8_test_bot?start=012345678901',linkCode:'012345678901',expiresIn:600});
     },console,setTimeout,clearTimeout
   };
   const pageSource=page==='dashboard'?source.replace("else if(page==='dashboard')dashboardInit();","else if(page==='dashboard')starsInit();"):source;
@@ -45,6 +51,8 @@ test('home page prepares a genuine Telegram hyperlink; clicking it needs no asyn
   const x=bootstrap('home');
   await flush();
   assert.equal(x.requested,1);
+  assert.equal(x.elements.botPairingHome.hidden,false);
+  assert.equal(x.elements.botPairCodeHome.value,'012345678901');
   assert.match(x.elements.botActivateHome.href,/^https:\/\/t\.me\/AIM8_test_bot\?start=/);
   assert.ok(x.clicks.has('botActivateHome:click'));
   let prevented=false;
@@ -57,6 +65,8 @@ test('dashboard prepares the same direct hyperlink before clicking',async()=>{
   await flush();
   assert.equal(x.requested,1);
   assert.match(x.elements.starsStart.href,/^https:\/\/t\.me\/AIM8_test_bot\?start=/);
+  assert.equal(x.elements.botPairingDash.hidden,false);
+  assert.equal(x.elements.botPairCodeDash.value,'012345678901');
   assert.ok(x.clicks.has('starsStart:click'));
 });
 test('website always includes a fallback open-Telegram link and success status',()=>{
