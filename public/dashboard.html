@@ -29,6 +29,14 @@
 <p>اضغط الزر لفتح بوت تيليجرام وربط حسابك بشكل آمن. اختر إحدى الباقات الثلاث داخل البوت، وبعد الدفع يصلك كود صالح 24 ساعة لهذا الحساب فقط.</p>
 <a class="btn full" id="starsStart" href="auth.html?next=dashboard.html">الحصول على كود التفعيل عبر بوت تيليجرام ←</a>
 <a class="btn ghost full" id="botLinkBackupDash" href="#" hidden rel="noreferrer" style="margin-top:10px">فتح تيليجرام مباشرة ←</a>
+<div id="botPairingDash" class="mini-card" hidden style="margin-top:14px">
+  <p><strong>رمز ربط تيليجرام (10 دقائق)</strong></p>
+  <p class="muted">إذا فتح البوت بدون الباقات، انسخ الرمز وأرسله للبوت برسالة. هذا رمز الربط وليس كود الاشتراك.</p>
+  <div style="display:flex;gap:9px;flex-wrap:wrap">
+  <input id="botPairCodeDash" type="text" readonly dir="ltr" spellcheck="false" autocomplete="off" aria-label="رمز ربط تيليجرام" style="min-width:0;flex:1;padding:11px;border-radius:10px;background:#0a1828;color:#fff;border:1px solid #34516a">
+  <button type="button" class="btn ghost" id="botCopyDash">نسخ الرمز</button>
+  </div>
+</div>
 <div class="form-group" style="margin-top:20px"><label for="starsCode">كود التفعيل من البوت</label><input id="starsCode" type="text" maxlength="40" placeholder="A8-..." autocomplete="off"></div>
 <button class="btn ghost" id="starsRedeem" type="button">تفعيل الكود</button>
 <p id="starsResult" role="status"></p>
