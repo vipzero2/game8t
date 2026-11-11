@@ -119,7 +119,7 @@ window.addEventListener('pageshow',event=>{
 });
 let mode=params.get('mode')==='signup'?'signup':'login';
 function setMode(next){mode=next;const signup=next==='signup';$('tabLogin').classList.toggle('active',!signup);$('tabSignup').classList.toggle('active',signup);$('tabLogin').setAttribute('aria-pressed',String(!signup));$('tabSignup').setAttribute('aria-pressed',String(signup));$('nameWrap').hidden=!signup;$('confirmWrap').hidden=!signup;$('authSubmit').textContent=signup?'إنشاء الحساب ←':'تسجيل الدخول ←';$('password').autocomplete=signup?'new-password':'current-password';$('confirm').required=signup;$('userName').required=signup;}
-async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=next==='/api/telegram/open'?next:'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
+async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=['/api/telegram/open','activate.html'].includes(next)?next:'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
 async function recoveryInit(){
  const mode=params.get('mode')||'reset';const isSignup=mode==='signup';const heading=$('recoveryTitle');if(heading)heading.textContent=isSignup?'تأكيد إنشاء الحساب':'استعادة كلمة المرور';
  if(isSignup){$('recoveryEmail').value=sessionStorage.getItem('aim8SignupEmail')||'';$('recoveryEmail').readOnly=true;$('sendRecovery').textContent='إعادة إرسال رمز التسجيل';$('recoveryCodeGroup').hidden=false;$('recoveryPassGroup').hidden=true;}
@@ -127,6 +127,28 @@ async function recoveryInit(){
  $('recoveryForm').addEventListener('submit',async ev=>{ev.preventDefault();const email=$('recoveryEmail').value.trim(),code=$('recoveryCode').value.trim();const btn=$('recoverySubmit');setBusy(btn,true);try{if(isSignup){await post('/auth/signup/verify',{email,code});sessionStorage.removeItem('aim8SignupEmail');location.href='dashboard.html';}else{const password=$('recoveryPassword').value;if(password!==$('recoveryConfirm').value)throw Error('كلمتا المرور غير متطابقتين');await post('/auth/password/reset',{email,code,newPassword:password});$('recoveryResult').textContent='تم تغيير كلمة المرور. ادخل إلى حسابك.';btn.hidden=true;}}catch(err){$('recoveryResult').textContent=err.message}finally{setBusy(btn,false)}});
 }
 async function checkoutInit(){ location.replace('dashboard.html#telegramActivation'); }
+async function activateInit(){
+ const form=$('activationForm'),status=$('activationResult'),input=$('activationCode'),submit=$('activationSubmit');
+ if(!form||!status||!input)return;
+ // Keep the activation code on the user's device only: never put it in a URL.
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const code=input.value.trim();
+  if(!/^A8-[A-Za-z0-9_-]{28}$/.test(code)){status.textContent='تحقق من كود التفعيل الذي استلمته من البوت.';return;}
+  setBusy(submit,true,'جارٍ تفعيل الاشتراك...');
+  status.textContent='';
+  try{
+   const data=await post('/telegram/redeem',{code});
+   input.value='';status.textContent='تم تفعيل اشتراك '+data.days+' يوم بنجاح. ينتهي في '+fmtTime(data.subscriptionUntil)+'.';
+   status.style.color='var(--mint)';
+   form.hidden=true;
+  }catch(error){
+   if(error.status===401){location.href='auth.html?next=activate.html';return;}
+   status.textContent=error.message;
+   status.style.color='var(--error)';
+  }finally{setBusy(submit,false);}
+ });
+}
 async function starsInit(){
  const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
  if(!start||!redeem)return;
@@ -148,7 +170,16 @@ async function starsInit(){
    finally{setBusy(redeem,false);}
  });
 }
-async function dashboardInit(){starsInit();try{const data=await api('/auth/me');const u=data.user;$('accountAlert').textContent='أهلًا '+u.name+'، هذه بياناتك المباشرة من السيرفر.';$('accountStatus').textContent=u.subscriptionActive?'نشط':'غير نشط';$('accountStatus').className='pill '+(u.subscriptionActive?'green':'orange');const paidOrder=data.orders.find(o=>o.status==='paid');$('accountPlan').textContent=u.subscriptionActive?(paidOrder?(names[paidOrder.plan_id]||'اشتراك AIM8'):'اشتراك نشط'):'لا توجد باقة نشطة';$('accountExpiry').textContent=fmtTime(u.subscriptionUntil);$('accountExpiry2').textContent=fmtTime(u.subscriptionUntil);$('accountStart').textContent=fmtTime(u.subscriptionStartedAt);$('accountEmail').textContent=u.email;$('deviceStatus').textContent=u.deviceBound?'مرتبط بجهاز Android واحد':'لم يُربط جهاز بعد';$('emailVerificationState').textContent=u.emailVerified?'البريد مؤكد':'البريد غير مؤكد، يلزم تأكيده قبل استخدام التطبيق';$('emailVerifySection').hidden=!!u.emailVerified;$('deviceChangeSection').hidden=!u.deviceBound||!u.emailVerified;$('lastOrder').textContent=data.orders[0]?.id||'—';$('adminEntry').hidden=u.role!=='admin';const list=$('userOrders');list.replaceChildren();if(!data.orders.length)list.append(el('p','لا توجد طلبات بعد.','muted'));data.orders.forEach(o=>{const item=el('div',null,'order-row');item.append(el('span',`${names[o.plan_id]||o.plan_id} · ${fmtMoney(o.amount_cents)} · ${fmtTime(o.created_at)}`),el('strong',({pending:'بانتظار الدفع',paying:'قيد التأكيد',paid:'مدفوع',failed:'فشل',expired:'منتهي'})[o.status]||o.status));list.append(item)});
+async function dashboardInit(){starsInit();try{const data=await api('/auth/me');const u=data.user;$('accountAlert').textContent='أهلًا '+u.name+'، هذه بياناتك المباشرة من السيرفر.';$('accountStatus').textContent=u.subscriptionActive?'نشط':'غير نشط';$('accountStatus').className='pill '+(u.subscriptionActive?'green':'orange');const paidOrder=data.orders.find(o=>o.status==='paid');$('accountPlan').textContent=u.subscriptionActive?(paidOrder?(names[paidOrder.plan_id]||'اشتراك AIM8'):'اشتراك نشط'):'لا توجد باقة نشطة';$('accountExpiry').textContent=fmtTime(u.subscriptionUntil);$('accountExpiry2').textContent=fmtTime(u.subscriptionUntil);$('accountStart').textContent=fmtTime(u.subscriptionStartedAt);$('accountEmail').textContent=u.email;$('deviceStatus').textContent=u.deviceBound?'مرتبط بجهاز Android واحد':'لم يُربط جهاز بعد';$('emailVerificationState').textContent=u.emailVerified?'البريد مؤكد':'البريد غير مؤكد، يلزم تأكيده قبل استخدام التطبيق';$('emailVerifySection').hidden=!!u.emailVerified;$('deviceChangeSection').hidden=!u.deviceBound||!u.emailVerified;$('lastOrder').textContent=data.telegramOrders?.[0]?.id||data.orders[0]?.id||'—';$('adminEntry').hidden=u.role!=='admin';const list=$('userOrders');list.replaceChildren();
+const botOrders=data.telegramOrders||[];
+if(!data.orders.length&&!botOrders.length)list.append(el('p','لا توجد طلبات بعد.','muted'));
+botOrders.forEach(o=>{
+ const item=el('div',null,'order-row');
+ item.append(el('span','بوت تيليجرام · '+(names[o.plan_id]||o.plan_id)+' · '+fmtTime(o.created_at)),
+   el('strong',({pending:'بانتظار الدفع',paid:'تم الدفع — أدخل كود التفعيل',redeemed:'مفعّل',refunded:'تم الاسترجاع'})[o.status]||o.status));
+ list.append(item);
+});
+data.orders.forEach(o=>{const item=el('div',null,'order-row');item.append(el('span',`${names[o.plan_id]||o.plan_id} · ${fmtMoney(o.amount_cents)} · ${fmtTime(o.created_at)}`),el('strong',({pending:'بانتظار الدفع',paying:'قيد التأكيد',paid:'مدفوع',failed:'فشل',expired:'منتهي'})[o.status]||o.status));list.append(item)});
 }catch(err){$('accountAlert').textContent=err.message+' — سجّل الدخول حتى تشوف حسابك.';$('accountAlert').className='alert warn';$('adminEntry').hidden=true;}
 $('logoutBtn')?.addEventListener('click',async()=>{try{await post('/auth/logout',{});location.href='auth.html'}catch(err){openDialog('تعذّر تسجيل الخروج',err.message)}})}
 $('emailVerifySend')?.addEventListener('click',async()=>{try{await post('/auth/email/request',{});$('emailVerifyMessage').textContent='تم إرسال رمز التحقق إلى بريدك';}catch(err){$('emailVerifyMessage').textContent=err.message}});
@@ -185,6 +216,7 @@ async function adminTelegramOrdersInit(){
  try{
   const data=await api('/admin/telegram/orders');
   root.replaceChildren();
+  if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='طلبات تيليجرام: '+data.orders.length;
   if(!data.orders.length){const tr=el('tr'),td=el('td','لا توجد مدفوعات تيليجرام بعد.');td.colSpan=6;tr.append(td);root.append(tr);return;}
   for(const order of data.orders){
    const tableRow=el('tr');
@@ -209,9 +241,10 @@ async function adminTelegramOrdersInit(){
    }else cell.textContent=order.status==='refunded'?'تم الاسترجاع':'بانتظار الدفع';
    tableRow.append(cell);root.append(tableRow);
   }
- }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);}
+ }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='تعذّر تحميل مدفوعات تيليجرام';}
 }
 async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+$('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}
 $('adminReset').addEventListener('click',()=>doAction('/admin/reset-device',{},'فك ربط جهاز المستخدم؟'));
@@ -224,5 +257,5 @@ $('ticketForm').addEventListener('submit',async e=>{e.preventDefault();const btn
 }
 async function adminTicketsInit(){try{const response=await api('/admin/tickets');const root=$('adminTickets');if(!root)return;root.replaceChildren();if(!response.tickets.length)root.append(el('p','لا توجد طلبات دعم.','muted'));response.tickets.forEach(t=>{const wrap=el('div',null,'ticket-card');wrap.append(el('h3',t.subject+' — '+t.email),el('small',fmtTime(t.created_at)+' · '+t.status),el('p',t.message));if(t.reply)wrap.append(el('div','الرد السابق: '+t.reply,'ticket-reply'));const btn=el('button','الرد على الطلب','btn small ghost');btn.type='button';btn.addEventListener('click',async()=>{const answer=prompt(tr('اكتب رد الإدارة:'),t.reply||'');if(!answer||answer.trim().length<3)return;try{await post('/admin/reply-ticket',{ticketId:t.id,reply:answer.trim()});showToast('تم إرسال الرد');adminTicketsInit()}catch(e){openDialog('تعذّر الرد',e.message)}});wrap.append(btn);root.append(wrap)})}catch(err){if($('adminTickets'))$('adminTickets').textContent=err.message}}
 $('downloadDemo')?.addEventListener('click',()=>openDialog('تنزيل التطبيق','لا يوجد رابط تنزيل رسمي بعد. سيظهر فقط بعد تجهيز إصدار Android.'));
-const page=document.body.dataset.page;if(page==='home')homeInit();else if(page==='auth')authInit();else if(page==='recovery')recoveryInit();else if(page==='checkout')checkoutInit();else if(page==='dashboard')dashboardInit();else if(page==='admin'){adminInit();adminTicketsInit();}else if(page==='support')supportInit();
+const page=document.body.dataset.page;if(page==='home')homeInit();else if(page==='auth')authInit();else if(page==='recovery')recoveryInit();else if(page==='checkout')checkoutInit();else if(page==='dashboard')dashboardInit();else if(page==='activate')activateInit();else if(page==='admin'){adminInit();adminTicketsInit();}else if(page==='support')supportInit();
 })();

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><script src="assets/i18n.js?v=activate2"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080e1a"><meta name="color-scheme" content="dark">
+<meta name="description" content="تفعيل حساب AIM8 بكود بوت تيليجرام">
+<title>تفعيل كود AIM8 | AIM8</title>
+<link rel="stylesheet" href="assets/style.css"><link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+</head>
+<body data-page="activate">
+<div class="notice-bar">AIM8 · تفعيل الاشتراك بكود بوت تيليجرام</div>
+<header class="site-header"><div class="container nav">
+<a class="brand" href="index.html"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+<nav class="nav-links" id="mainNav"><a href="index.html">الرئيسية</a><a href="dashboard.html">لوحة الحساب</a><a href="support.html">الدعم</a></nav>
+<div class="nav-actions"><a class="btn small" href="dashboard.html">حسابي</a></div>
+<button type="button" class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="mainNav" aria-label="فتح القائمة">☰</button>
+</div></header>
+<main><div class="container" style="max-width:680px;padding:48px 0 84px">
+<div class="page-top"><span class="eyebrow">اشتراك AIM8</span><h1>تفعيل كود الاشتراك</h1>
+<p>وصل إليك كود من بوت تيليجرام بعد الدفع؟ ألصقه هنا ليُضاف الاشتراك إلى حسابك المسجّل.</p></div>
+<section class="glass" id="activationPanel">
+<form id="activationForm">
+<div class="form-group"><label for="activationCode">كود التفعيل من بوت تيليجرام</label>
+<input type="text" id="activationCode" autocomplete="off" spellcheck="false" dir="ltr"
+placeholder="A8-..." minlength="31" maxlength="40" required
+style="text-align:left;font-family:monospace;font-size:17px;letter-spacing:.03em"></div>
+<p class="muted">الكود صالح لمدة 24 ساعة من وقت الدفع ويُستخدم مرة واحدة على حساب AIM8 المرتبط.</p>
+<button class="btn full" id="activationSubmit" type="submit">تفعيل الاشتراك الآن</button>
+</form>
+<p id="activationResult" role="status" aria-live="polite" style="margin-top:14px"></p>
+<div class="page-actions" style="margin-top:18px"><a class="btn ghost full" href="dashboard.html">الرجوع إلى حسابي</a></div>
+</section>
+<p class="muted" style="margin-top:18px">إذا طُلب منك تسجيل الدخول، استخدم نفس حساب AIM8 الذي ربطته ببوت تيليجرام قبل الدفع.</p>
+</div></main>
+<footer class="footer"><div class="container"><div class="footer-bottom"><span>© AIM8 — جميع الحقوق محفوظة</span><span>8aim.site</span></div></div></footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody"></p><div class="modal-actions"><button type="button" class="btn small" id="dialogClose">حسنًا</button></div></dialog>
+<script src="assets/main.js?v=activate2" defer></script>
+</body></html>

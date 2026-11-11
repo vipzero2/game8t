@@ -188,6 +188,11 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const paidMessages=calls.filter(x=>x.method==='sendMessage' && x.data.text.includes('كود AIM8'));
     assert.ok(paidMessages.length>=1);
     const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
+    // A buyer who receives their Telegram code must see the real purchase
+    // in the same account's dashboard, not just legacy OxaPay orders.
+    const botOrders=await send('GET','/auth/me',{},userCookie);
+    assert.equal(botOrders.ans.status,200);
+    assert.ok(botOrders.data.telegramOrders.some(o=>o.id===oid && o.status==='paid' && o.duration_days===90));
     const credited=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(credited.ans.status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+90*86400);assert.equal(db0.prepare("SELECT COUNT(*) c FROM subscription_grants WHERE user_id=? AND source='oxapay'").get(target.id).c,1);
