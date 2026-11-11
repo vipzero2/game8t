@@ -204,6 +204,7 @@ export async function applyRefund(env, charge, user) {
     return false;
   }
   if (order.status === 'refunded') return true;
+  await ensureLicenseSchema(env);
   const t = now(), nonce = uid();
   const result = await env.DB.batch([
     env.DB.prepare("UPDATE telegram_orders SET status='refunded',refunded_at=?,refund_nonce=? WHERE id=? AND telegram_charge_id=? AND status IN ('paid','redeemed')")
@@ -212,14 +213,11 @@ export async function applyRefund(env, charge, user) {
       .bind(t, order.id, order.id, nonce),
     env.DB.prepare('UPDATE users SET subscription_until=' + entitlementEndSql +
       " WHERE id=? AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded' AND redeemed_at IS NOT NULL)")
-      .bind(order.user_id, order.id, nonce)
+      .bind(order.user_id, order.id, nonce),
+    env.DB.prepare("UPDATE telegram_device_codes SET expires_at=?,used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded')")
+      .bind(t,t,order.user_id,order.code_hash||'',order.id,nonce)
   ]);
   if (result[0]?.meta?.changes === 1) {
-    // An externally or bot-refunded charge must also invalidate its still-
-    // unused passwordless activation code, even when another paid grant remains.
-    await ensureLicenseSchema(env);
-    await env.DB.prepare('UPDATE telegram_device_codes SET expires_at=?,used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL')
-      .bind(t,t,order.user_id,order.code_hash||'').run();
     // Delivery errors should not undo the refund already recorded in D1.
     try { await send(env, order.chat_id, 'تم تسجيل استرجاع دفعة النجوم. أُلغي كود الدفع وأُزيلت مدة هذه الدفعة فقط.',null,user); }
     catch (e) { console.error('Could not notify refunded user:', String(e)); }
