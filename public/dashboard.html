@@ -7,7 +7,7 @@
 <title>dashboard | AIM8</title><link rel="stylesheet" href="assets/style.css">
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 </head><body data-page="dashboard">
-<div class="notice-bar" id="siteNotice">AIM8 · تفعيل الاشتراكات عبر Telegram Stars — استلم الكود من البوت بعد الدفع.</div>
+<div class="notice-bar" id="siteNotice">AIM8 · كود تفعيل حسابك من بوت تيليجرام الرسمي.</div>
 <header class="site-header"><div class="container nav">
   <a class="brand" href="index.html" aria-label="AIM8 - الصفحة الرئيسية"><span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
   <nav class="nav-links" id="mainNav" aria-label="التنقل الرئيسي">
@@ -24,12 +24,10 @@
 <div id="deviceChangeSection" hidden><h3>تغيير جهاز Android</h3><p>جهاز واحد فقط. تأكيد رمز Gmail يفصل الجهاز القديم ويحافظ على اشتراكك. يرفض الجهاز القديم بعد التغيير عند أول تحقق عبر السيرفر.</p>
 <button type="button" id="deviceChangeSend" class="btn ghost small">أرسل رمز تغيير الجهاز</button><div class="form-group"><label for="deviceChangeCode">رمز Gmail</label><input id="deviceChangeCode" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000"></div>
 <button type="button" id="deviceChangeConfirm" class="btn small">تأكيد فصل الجهاز القديم</button><p id="deviceChangeMessage" role="status"></p></div>
-</section><section class="mini-card" style="margin-top:20px" id="telegramStarsSection">
-<h3>اشتراك Telegram Stars ⭐</h3>
-<p>اختر الباقة ثم افتح البوت للدفع. يصلك كود صالح 24 ساعة ولمرة واحدة، ويُفعّل هذا الحساب فقط.</p>
-<div class="form-group"><label for="starsPlan">اختر الباقة</label><select id="starsPlan"><option value="quarter">3 أشهر · 150 ⭐</option><option value="half">6 أشهر · 250 ⭐</option><option value="year">سنة كاملة · 450 ⭐</option></select></div>
-<p class="muted" id="starsPlanDetails">جارٍ تحميل أسعار النجوم...</p>
-<button class="btn" id="starsStart" type="button" disabled>الانتقال إلى بوت تيليجرام للدفع</button>
+</section><section class="mini-card" style="margin-top:20px" id="telegramActivation">
+<h3>الحصول على كود تفعيل الحساب</h3>
+<p>اضغط الزر لفتح بوت تيليجرام وربط حسابك بشكل آمن. اختر إحدى الباقات الثلاث داخل البوت، وبعد الدفع يصلك كود صالح 24 ساعة لهذا الحساب فقط.</p>
+<button class="btn full" id="starsStart" type="button">الحصول على كود التفعيل عبر بوت تيليجرام ←</button>
 <div class="form-group" style="margin-top:20px"><label for="starsCode">كود التفعيل من البوت</label><input id="starsCode" type="text" maxlength="40" placeholder="A8-..." autocomplete="off"></div>
 <button class="btn ghost" id="starsRedeem" type="button">تفعيل الكود</button>
 <p id="starsResult" role="status"></p>

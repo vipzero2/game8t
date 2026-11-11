@@ -15,49 +15,59 @@ const tr=value=>window.AIM8_I18N?.translate(value)||value;
 const fmtTime=ts=>ts?new Date(ts*1000).toLocaleDateString(userLang==='ar'?'ar-IQ':'en-US',{year:'numeric',month:'short',day:'numeric'}):'—';
 const fmtMoney=cents=>Number.isInteger(cents)&&cents>=100?'$'+(cents/100).toFixed(2):'السعر قريبًا';
 const names={week:'الأسبوعية (قديمة)',month:'الشهرية (قديمة)',quarter:'3 أشهر',half:'6 أشهر',year:'سنة كاملة'};
-const sellablePlanIds=['quarter','half','year'];
-async function api(path,options={}){let response;try{response=await fetch('/api'+path,{...options,credentials:'same-origin',headers:{'content-type':'application/json',...(options.headers||{})}})}catch{throw Error('تعذّر الاتصال بالسيرفر. افتح الموقع بعد ربط Cloudflare وD1.')}let data;try{data=await response.json()}catch{throw Error('رد غير متوقع من السيرفر. تحقق من ربط Pages Functions.')}if(!response.ok||!data.ok)throw Error(data.message||'تعذّرت العملية');return data}
+async function api(path,options={}){let response;try{response=await fetch('/api'+path,{...options,credentials:'same-origin',headers:{'content-type':'application/json',...(options.headers||{})}})}catch{throw Error('تعذّر الاتصال بالسيرفر. افتح الموقع بعد ربط Cloudflare وD1.')}let data;try{data=await response.json()}catch{throw Error('رد غير متوقع من السيرفر. تحقق من ربط Pages Functions.')}if(!response.ok||!data.ok){const err=Error(data.message||'تعذّرت العملية');err.status=response.status;throw err;}return data}
 async function post(path,payload){return api(path,{method:'POST',body:JSON.stringify(payload||{})})}
 function setBusy(button,busy,loading='جارٍ التنفيذ...'){if(!button)return;if(busy){button.dataset.original=button.textContent;button.disabled=true;button.textContent=loading;}else{button.disabled=false;button.textContent=button.dataset.original||button.textContent;}}
 function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined&&txt!==null)node.textContent=String(txt);if(cls)node.className=cls;return node}
-async function loadPlans(){try{const result=await api('/config');if($('siteNotice')){$('siteNotice').textContent='AIM8 · الدفع بالنجوم من فاتورة Telegram الرسمية فقط. لا تحول نجوم يدوياً.'}result.plans.forEach(plan=>{const link=document.querySelector(`a[href="checkout.html?plan=${plan.id}"]`);if(link){const card=link.closest('.plan');const price=card?.querySelector('.price');if(price){price.replaceChildren(el('span',(plan.starsPrice?plan.starsPrice+' ⭐':'السعر قريبًا')),el('small',' / '+plan.days+' يومًا'))}link.textContent=plan.starsEnabled&&plan.starsPrice?'اختيار الباقة ←':'تفاصيل الباقة ←';}if($('checkoutPlan')&&(params.get('plan')||'quarter')===plan.id)applyCheckout(plan);});return result;}catch(err){if(document.body.dataset.page==='checkout')$('paymentStatus').textContent=err.message;return null;}}
-function applyCheckout(p){$('checkoutPlan').textContent=p.name;$('checkoutDays').textContent=p.days+' يومًا';const price=p.starsPrice?p.starsPrice+' ⭐':'السعر قريبًا';$('checkoutPrice').textContent=price;$('checkoutTotal').textContent=price;const pay=$('payNow');pay.disabled=!p.starsEnabled||!p.starsPrice;pay.textContent=pay.disabled?'الدفع غير متاح حاليًا':'الانتقال إلى بوت Telegram للدفع ←';$('checkoutAvailability').textContent=pay.disabled?'الباقة غير متاحة للدفع بعد':'الباقة متاحة للدفع بالنجوم';pay.dataset.plan=p.id;}
-async function homeInit(){await loadPlans()}
+// Website doesn't display payment amounts or let the user choose a plan.
+// The linked Telegram bot owns the package picker and the official invoice.
+async function loadPlans(){return null;}
+async function openActivationBot(button,errorNode){
+ setBusy(button,true,'جارٍ فتح بوت تيليجرام...');
+ try{
+  const data=await post('/telegram/link',{});
+  const url=new URL(data.url);
+  if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
+  location.assign(url.href);
+ }catch(err){
+  if(err.status===401){location.assign('auth.html?next=dashboard.html');return;}
+  if(errorNode)errorNode.textContent=err.message;
+  else openDialog('تعذّر فتح البوت',err.message);
+ }finally{setBusy(button,false);}
+}
+async function homeInit(){
+ const button=$('botActivateHome');
+ button?.addEventListener('click',event=>{event.preventDefault();openActivationBot(button,null);});
+}
 let mode=params.get('mode')==='signup'?'signup':'login';
 function setMode(next){mode=next;const signup=next==='signup';$('tabLogin').classList.toggle('active',!signup);$('tabSignup').classList.toggle('active',signup);$('tabLogin').setAttribute('aria-pressed',String(!signup));$('tabSignup').setAttribute('aria-pressed',String(signup));$('nameWrap').hidden=!signup;$('confirmWrap').hidden=!signup;$('authSubmit').textContent=signup?'إنشاء الحساب ←':'تسجيل الدخول ←';$('password').autocomplete=signup?'new-password':'current-password';$('confirm').required=signup;$('userName').required=signup;}
-async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=next&&/^checkout\.html\?plan=(quarter|half|year)$/.test(next)?next:'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
+async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=next==='dashboard.html'?'dashboard.html':'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
 async function recoveryInit(){
  const mode=params.get('mode')||'reset';const isSignup=mode==='signup';const heading=$('recoveryTitle');if(heading)heading.textContent=isSignup?'تأكيد إنشاء الحساب':'استعادة كلمة المرور';
  if(isSignup){$('recoveryEmail').value=sessionStorage.getItem('aim8SignupEmail')||'';$('recoveryEmail').readOnly=true;$('sendRecovery').textContent='إعادة إرسال رمز التسجيل';$('recoveryCodeGroup').hidden=false;$('recoveryPassGroup').hidden=true;}
  $('sendRecovery').addEventListener('click',async()=>{const email=$('recoveryEmail').value.trim();const btn=$('sendRecovery');setBusy(btn,true);try{await post(isSignup?'/auth/signup/resend':'/auth/password/request',{email});$('recoveryResult').textContent='إذا كان البريد مؤهلًا، افحص Gmail والرسائل غير المرغوبة.';$('recoveryCodeGroup').hidden=false;if(!isSignup)$('recoveryPassGroup').hidden=false;}catch(err){$('recoveryResult').textContent=err.message}finally{setBusy(btn,false)}});
  $('recoveryForm').addEventListener('submit',async ev=>{ev.preventDefault();const email=$('recoveryEmail').value.trim(),code=$('recoveryCode').value.trim();const btn=$('recoverySubmit');setBusy(btn,true);try{if(isSignup){await post('/auth/signup/verify',{email,code});sessionStorage.removeItem('aim8SignupEmail');location.href='dashboard.html';}else{const password=$('recoveryPassword').value;if(password!==$('recoveryConfirm').value)throw Error('كلمتا المرور غير متطابقتين');await post('/auth/password/reset',{email,code,newPassword:password});$('recoveryResult').textContent='تم تغيير كلمة المرور. ادخل إلى حسابك.';btn.hidden=true;}}catch(err){$('recoveryResult').textContent=err.message}finally{setBusy(btn,false)}});
 }
-async function checkoutInit(){const planId=sellablePlanIds.includes(params.get('plan'))?params.get('plan'):'quarter';$('checkoutPlan').textContent=names[planId];$('checkoutDays').textContent=({quarter:90,half:180,year:365})[planId]+' يومًا';const results=await Promise.allSettled([loadPlans(),api('/auth/me')]);const user=results[1].status==='fulfilled'?results[1].value.user:null;if(user){$('checkoutEmail').value=user.email;}else{$('paymentStatus').textContent='حتى تكمل الطلب، لازم تسجّل دخولك. ';const link=el('a','تسجيل الدخول الآن ←');link.href='auth.html?next='+encodeURIComponent('checkout.html?plan='+planId);$('paymentStatus').append(link);$('payNow').disabled=true;}$('payNow').addEventListener('click',async()=>{if(!user)return location.assign('auth.html?next='+encodeURIComponent('checkout.html?plan='+planId));const button=$('payNow');setBusy(button,true,'جارٍ تجهيز رابط البوت...');try{const res=await post('/telegram/link',{planId});const url=new URL(res.url);if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط البوت غير موثوق');location.assign(url.href);}catch(err){openDialog('تعذّر بدء الدفع',err.message)}finally{setBusy(button,false)}})}
+async function checkoutInit(){ location.replace('dashboard.html#telegramActivation'); }
 async function starsInit(){
- const planSelect=$('starsPlan'),start=$('starsStart'),details=$('starsPlanDetails'),result=$('starsResult'),redeem=$('starsRedeem');
- if(!planSelect||!start||!redeem)return;
- let plans=[];
- try{const cfg=await api('/config');plans=cfg.plans||[];}catch(e){details.textContent=e.message;return;}
- function render(){
-  const p=plans.find(x=>x.id===planSelect.value);
-  if(!p||!p.starsEnabled||!p.starsPrice){details.textContent='هذه الباقة غير مفعلة بالنجوم حالياً';start.disabled=true;return;}
-  details.textContent=p.name+' · '+p.days+' يوم · '+p.starsPrice+' ⭐';
-  start.disabled=false;
- }
- planSelect.addEventListener('change',render);render();
- start.addEventListener('click',async()=>{setBusy(start,true,'جارٍ إنشاء رابط البوت...');try{
-   const data=await post('/telegram/link',{planId:planSelect.value});
-   const url=new URL(data.url);
-   if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
-   location.assign(url.href);
-   result.textContent='افتح بوت تيليجرام ثم اضغط Start لإظهار فاتورة النجوم.';
- }catch(e){result.textContent=e.message;}finally{setBusy(start,false);render();}});
- redeem.addEventListener('click',async()=>{const code=$('starsCode').value.trim();if(!code){result.textContent='أدخل الكود أولاً';return;}
-  setBusy(redeem,true,'جارٍ التفعيل...');try{const data=await post('/telegram/redeem',{code});
-   result.textContent='تم تفعيل '+data.days+' يوم بنجاح. تاريخ الانتهاء: '+fmtTime(data.subscriptionUntil);
-   $('accountExpiry').textContent=fmtTime(data.subscriptionUntil);$('accountExpiry2').textContent=fmtTime(data.subscriptionUntil);
-   $('accountStatus').textContent='نشط';$('accountStatus').className='pill green';$('starsCode').value='';
-  }catch(e){result.textContent=e.message;}finally{setBusy(redeem,false);}});
+ const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
+ if(!start||!redeem)return;
+ start.addEventListener('click',()=>openActivationBot(start,result));
+ redeem.addEventListener('click',async()=>{
+   const code=$('starsCode').value.trim();
+   if(!code){result.textContent='أدخل الكود أولاً';return;}
+   setBusy(redeem,true,'جارٍ التفعيل...');
+   try{
+     const data=await post('/telegram/redeem',{code});
+     result.textContent='تم تفعيل '+data.days+' يوم بنجاح. تاريخ الانتهاء: '+fmtTime(data.subscriptionUntil);
+     $('accountExpiry').textContent=fmtTime(data.subscriptionUntil);
+     $('accountExpiry2').textContent=fmtTime(data.subscriptionUntil);
+     $('accountStatus').textContent='نشط';
+     $('accountStatus').className='pill green';
+     $('starsCode').value='';
+   }catch(e){result.textContent=e.message;}
+   finally{setBusy(redeem,false);}
+ });
 }
 async function dashboardInit(){starsInit();try{const data=await api('/auth/me');const u=data.user;$('accountAlert').textContent='أهلًا '+u.name+'، هذه بياناتك المباشرة من السيرفر.';$('accountStatus').textContent=u.subscriptionActive?'نشط':'غير نشط';$('accountStatus').className='pill '+(u.subscriptionActive?'green':'orange');const paidOrder=data.orders.find(o=>o.status==='paid');$('accountPlan').textContent=u.subscriptionActive?(paidOrder?(names[paidOrder.plan_id]||'اشتراك AIM8'):'اشتراك نشط'):'لا توجد باقة نشطة';$('accountExpiry').textContent=fmtTime(u.subscriptionUntil);$('accountExpiry2').textContent=fmtTime(u.subscriptionUntil);$('accountStart').textContent=fmtTime(u.subscriptionStartedAt);$('accountEmail').textContent=u.email;$('deviceStatus').textContent=u.deviceBound?'مرتبط بجهاز Android واحد':'لم يُربط جهاز بعد';$('emailVerificationState').textContent=u.emailVerified?'البريد مؤكد':'البريد غير مؤكد، يلزم تأكيده قبل استخدام التطبيق';$('emailVerifySection').hidden=!!u.emailVerified;$('deviceChangeSection').hidden=!u.deviceBound||!u.emailVerified;$('lastOrder').textContent=data.orders[0]?.id||'—';$('adminEntry').hidden=u.role!=='admin';const list=$('userOrders');list.replaceChildren();if(!data.orders.length)list.append(el('p','لا توجد طلبات بعد.','muted'));data.orders.forEach(o=>{const item=el('div',null,'order-row');item.append(el('span',`${names[o.plan_id]||o.plan_id} · ${fmtMoney(o.amount_cents)} · ${fmtTime(o.created_at)}`),el('strong',({pending:'بانتظار الدفع',paying:'قيد التأكيد',paid:'مدفوع',failed:'فشل',expired:'منتهي'})[o.status]||o.status));list.append(item)});
 }catch(err){$('accountAlert').textContent=err.message+' — سجّل الدخول حتى تشوف حسابك.';$('accountAlert').className='alert warn';$('adminEntry').hidden=true;}
@@ -76,14 +86,14 @@ function renderStarsAdmin(plans){
  plans.forEach(p=>{
   const wrap=el('div',null,'admin-plan');
   const heading=el('strong',p.name+' · '+p.days+' يوم');
-  const input=el('input');input.type='number';input.min='0';input.max='100000';input.step='1';input.value=p.stars_price||0;input.setAttribute('aria-label','سعر النجوم: '+p.name);
+  const input=el('input');input.type='number';input.min='0';input.max='100000';input.step='1';input.value=p.stars_price||0;input.setAttribute('aria-label','قيمة الدفع داخل البوت: '+p.name);
   const check=el('input');check.type='checkbox';check.checked=!!p.stars_enabled;
-  const label=el('label','تفعيل البيع بالنجوم');label.prepend(check);
-  const save=el('button','حفظ سعر النجوم','btn small');save.type='button';
+  const label=el('label','تفعيل الباقة في البوت');label.prepend(check);
+  const save=el('button','حفظ إعدادات الباقة','btn small');save.type='button';
   save.addEventListener('click',async()=>{setBusy(save,true);try{
     await post('/admin/telegram/plan',{id:p.id,starsPrice:Number(input.value),enabled:check.checked});
-    showToast('تم تحديث سعر النجوم');
-  }catch(e){openDialog('خطأ في سعر النجوم',e.message)}finally{setBusy(save,false)}});
+    showToast('تم تحديث إعدادات الباقة');
+  }catch(e){openDialog('خطأ في إعدادات الباقة',e.message)}finally{setBusy(save,false)}});
   wrap.append(heading,input,label,save);root.append(wrap);
  });
  $('adminTelegramWebhook')?.addEventListener('click',async()=>{const btn=$('adminTelegramWebhook');setBusy(btn,true,'جارٍ الربط...');

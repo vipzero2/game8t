@@ -134,7 +134,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     return oldFetch(url,options);
   };
   try {
-    const begin=await send('POST','/telegram/link',{planId:'quarter'},userCookie);
+    const begin=await send('POST','/telegram/link',{},userCookie);
     assert.equal(begin.ans.status,200);
     const token=new URL(begin.data.url).searchParams.get('start');
     const secret=base64url(await hmac(env.SESSION_SECRET,'aim8:telegram:webhook:v1'));
@@ -145,8 +145,17 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const rejected=await onRequest({request:new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
     assert.equal(rejected.status,401);
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start '+token}})).status,200);
+    // No invoice may be sent until the buyer selects their plan INSIDE Telegram.
+    assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
+    const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
+    assert.ok(linkedPicker,'A plan picker should appear inside the bot');
+    assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data),['buy:quarter']);
+    const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE user_id=? ORDER BY created_at DESC LIMIT 1').get(target.id);
+    assert.equal(dbLink.plan_id,'quarter'); // legacy schema placeholder only
+    assert.ok(dbLink.used_at);
+    assert.equal((await event({callback_query:{id:'linked-plan-choice',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}})).status,200);
     const invoice=calls.find(x=>x.method==='sendInvoice');
-    assert.ok(invoice,'Telegram invoice should be sent');
+    assert.ok(invoice,'Invoice should only be sent after selecting an option');
     assert.equal(invoice.data.currency,'XTR');assert.equal(invoice.data.prices[0].amount,150);
     const oid=invoice.data.payload;
     assert.equal((await event({pre_checkout_query:{id:'pre-1',from:{id:7001,language_code:'ar'},invoice_payload:oid,currency:'XTR',total_amount:150}})).status,200);
