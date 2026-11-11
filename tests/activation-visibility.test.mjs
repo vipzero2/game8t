@@ -29,7 +29,8 @@ test('Admin shows Telegram paid orders first and keeps legacy orders labeled',()
  assert.match(js,/api\('\/admin\/telegram\/orders'\)/);
  assert.match(js,/\$\('telegramPaymentCount'\)/);
 });
-test('Telegram success directs users to the activation form',()=>{
+test('Telegram sends a code usable by AIM8 without a website account',()=>{
  const bot=read('functions/_lib/telegram.js');
- assert.match(bot,/\/activate\.html',null,m\.from/);
+ assert.match(bot,/أدخل الكود داخل تطبيق AIM8/);
+ assert.match(bot,/\/recover/);
 });
