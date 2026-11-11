@@ -24,6 +24,15 @@
 <div id="deviceChangeSection" hidden><h3>تغيير جهاز Android</h3><p>جهاز واحد فقط. تأكيد رمز Gmail يفصل الجهاز القديم ويحافظ على اشتراكك. يرفض الجهاز القديم بعد التغيير عند أول تحقق عبر السيرفر.</p>
 <button type="button" id="deviceChangeSend" class="btn ghost small">أرسل رمز تغيير الجهاز</button><div class="form-group"><label for="deviceChangeCode">رمز Gmail</label><input id="deviceChangeCode" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000"></div>
 <button type="button" id="deviceChangeConfirm" class="btn small">تأكيد فصل الجهاز القديم</button><p id="deviceChangeMessage" role="status"></p></div>
+</section><section class="mini-card" style="margin-top:20px" id="telegramStarsSection">
+<h3>اشتراك Telegram Stars ⭐</h3>
+<p>اختر الباقة ثم افتح البوت للدفع. يصلك كود صالح 24 ساعة ولمرة واحدة، ويُفعّل هذا الحساب فقط.</p>
+<div class="form-group"><label for="starsPlan">اختر الباقة</label><select id="starsPlan"><option value="week">الأسبوعية</option><option value="month">الشهرية</option><option value="quarter">3 أشهر</option></select></div>
+<p class="muted" id="starsPlanDetails">جارٍ تحميل أسعار النجوم...</p>
+<button class="btn" id="starsStart" type="button" disabled>الانتقال إلى بوت تيليجرام للدفع</button>
+<div class="form-group" style="margin-top:20px"><label for="starsCode">كود التفعيل من البوت</label><input id="starsCode" type="text" maxlength="40" placeholder="A8-..." autocomplete="off"></div>
+<button class="btn ghost" id="starsRedeem" type="button">تفعيل الكود</button>
+<p id="starsResult" role="status"></p>
 </section><h3 style="margin-top:20px">آخر الطلبات</h3><div id="userOrders" class="order-list"><p class="muted">لا توجد طلبات.</p></div></section>
 <aside class="glass"><h2>التطبيق والمساعدة</h2><p>سيظهر رابط التطبيق الرسمي عند اعتماد إصدار Android.</p><div class="mini-card"><strong>نسخة Android</strong><div class="muted" style="font-size:12px">لا يوجد ملف APK منشور رسميًا حتى الآن.</div></div><div class="page-actions"><button type="button" class="btn ghost full" id="downloadDemo" disabled>تنزيل التطبيق — قريبًا</button><a href="index.html#faq" class="btn dark full">الأسئلة الشائعة</a></div></aside></div></div></main>
 <footer class="footer"><div class="container"><div class="footer-main">
