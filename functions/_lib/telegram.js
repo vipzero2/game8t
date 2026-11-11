@@ -60,7 +60,7 @@ async function sendInvoice(env, chatId, telegramId, planId, user) {
   });
 }
 
-export async function startLink(ctx) {
+async function createAccountLink(ctx) {
   const user = await currentUser(ctx);
   if (!user.email_verified) fail('EMAIL_UNVERIFIED', 'أكد بريدك أولاً', 403);
   // The website never chooses a package. The Telegram bot offers the
@@ -68,7 +68,6 @@ export async function startLink(ctx) {
   // A historical plan_id is required by migration 003's non-null FK.
   // Store the existing quarter ID only as a compatibility placeholder.
   // The bot never uses telegram_links.plan_id to create an invoice.
-  await body(ctx.request);
   const bot = await telegram(ctx.env, 'getMe', {});
   const username = String(bot.username || '');
   if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)) fail('BOT_USERNAME', 'اسم البوت غير صالح', 503);
@@ -76,7 +75,35 @@ export async function startLink(ctx) {
   const token = randomToken(9);
   await ctx.env.DB.prepare('INSERT INTO telegram_links(token_hash,user_id,plan_id,expires_at,created_at) VALUES(?,?,?,?,?)')
     .bind(await sha256(token), user.id, 'quarter', now() + 600, now()).run();
-  return json({ ok: true, url: 'https://t.me/' + username + '?start=' + token, linkCode: token, expiresIn: 600 });
+  return { url: 'https://t.me/' + username + '?start=' + token, linkCode: token, expiresIn: 600 };
+}
+
+export async function startLink(ctx) {
+  await body(ctx.request);
+  return json({ok:true,...await createAccountLink(ctx)});
+}
+
+// Permanent account-specific URL. Never embed a guessed or reusable bot
+// username/token: resolve the verified session, mint a one-time 10-minute
+// pairing payload, and redirect directly to the real Telegram bot.
+export async function openBot(ctx) {
+  let link;
+  try { link = await createAccountLink(ctx); }
+  catch(error) {
+    if (error instanceof ApiError && error.status === 401) {
+      return new Response(null,{status:302,headers:{
+        Location:'/auth.html?next=%2Fapi%2Ftelegram%2Fopen',
+        'Cache-Control':'no-store',
+        'Referrer-Policy':'no-referrer'
+      }});
+    }
+    throw error;
+  }
+  return new Response(null,{status:302,headers:{
+    Location:link.url,
+    'Cache-Control':'no-store, private',
+    'Referrer-Policy':'no-referrer'
+  }});
 }
 
 export async function redeem(ctx) {
