@@ -281,7 +281,7 @@ async function onPaid(env, m, pay) {
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
   await send(env, chat, 'تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n' + code +
     '\n\nصالح حتى ' + new Date(after.code_expires_at * 1000).toISOString() +
-    '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/dashboard.html',null,m.from);
+    '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/activate.html',null,m.from);
 }
 
 async function onRefund(env, m, pay) {
