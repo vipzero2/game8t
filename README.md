@@ -1,6 +1,6 @@
 # AIM8 — الموقع ونظام الحسابات (Cloudflare + GitHub + D1)
 
-**الموقع المستهدف:** `https://aim8.site`  
+**الموقع المستهدف:** `https://8aim.site`  
 **الإصدار:** 1.0 — كود قابل للنشر **وليس موقعًا منشورًا أو متجرًا جاهزًا لاستقبال أموال حقيقية**.  
 **التقنيات:** HTML/CSS/JavaScript + Cloudflare Pages Functions (JavaScript) + Cloudflare D1 (SQLite) + OxaPay Merchant Invoice API.
 
@@ -58,7 +58,7 @@
 
    وأضف **`PAYMENTS_ENABLED=false`** كمتغير نصي، **`OXAPAY_SANDBOX=true`** للاختبار. أعد النشر.
 8. افتح رابط `*.pages.dev` الخاص بمشروعك؛ جرّب `https://YOUR-PROJECT.pages.dev/api/config`. يجب أن يعرض `"ok": true` و3 باقات (غير مفعلة).
-9. أضف النطاق `aim8.site`: Cloudflare → Add domain (إذا غير مضاف) → احصل على Nameservers من Cloudflare → استبدلها عند شركة شراء الدومين. من Pages → Custom domains → Add domain → `aim8.site` واتبع تعليمات Cloudflare الخاصة بسجلات DNS. فعّل HTTPS.
+9. أضف النطاق `8aim.site`: Cloudflare → Add domain (إذا غير مضاف) → احصل على Nameservers من Cloudflare → استبدلها عند شركة شراء الدومين. من Pages → Custom domains → Add domain → `8aim.site` واتبع تعليمات Cloudflare الخاصة بسجلات DNS. فعّل HTTPS.
 10. بعد أن يعمل الموقع، أنشئ حسابك الشخصي من `auth.html` ثم تحقّق منه يدويًا. **بعد التأكد أنه حسابك أنت فقط**، نفّذ الأمر التالي مع بريدك الحقيقي:
 
    ```powershell
@@ -74,7 +74,7 @@
 - أضف `OXAPAY_MERCHANT_KEY` كـ Cloudflare **Secret**.
 - ابدأ بـ `OXAPAY_SANDBOX=true`، وبعد نجاح الاختبارات والتأكد من السياسات فعّل `PAYMENTS_ENABLED=true` لاختبار إنشاء الفواتير.
 - عند الإطلاق الحقيقي: `OXAPAY_SANDBOX=false` ثم `PAYMENTS_ENABLED=true` بعد اختبار شامل وحماية الحسابات ومراجعة السياسات.
-- رابط Webhook الذي يرسله النظام تلقائيًا: `https://aim8.site/api/payments/webhook`.
+- رابط Webhook الذي يرسله النظام تلقائيًا: `https://8aim.site/api/payments/webhook`.
 - التفعيل يتم **فقط** بعد توقيع HMAC-SHA512 الصحيح للإشعار، وبعد استعلام تأكيدي من OxaPay عن رقم الفاتورة والطلب والعملة والمبلغ والحالة؛ نقرة المستخدم على رابط العودة ليست إثباتًا للدفع.
 
 > قبل أي بيع حقيقي: يلزم إضافة تحقق من ملكية البريد واستعادة كلمات المرور، ووسيلة دعم موثوقة، واعتماد سياسات الخصوصية والاسترجاع والشروط، واختبار OxaPay الفعلي، وتحديد معلومات تشغيل النشاط القانوني. الأفضل أيضًا تفعيل Cloudflare Turnstile لحماية التسجيل من الروبوتات وإجراء مراجعة أمنية.
