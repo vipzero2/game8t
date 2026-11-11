@@ -33,9 +33,9 @@ const dictionary=new Map([
   ['سنة كاملة','1 Year']
 ]);
 const phrases=[
-  ['تم الدفع بنجاح ✅\\nكود AIM8 الخاص بحسابك:\\n','Payment successful ✅\\nYour AIM8 activation code:\\n'],
-  ['\\n\\nصالح حتى ','\\n\\nValid until '],
-  ['\\nاستخدمه مرة واحدة في صفحة حسابك على ','\\nRedeem it once on your dashboard at '],
+  ['تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n','Payment successful ✅\nYour AIM8 activation code:\n'],
+  ['\n\nصالح حتى ','\n\nValid until '],
+  ['\nاستخدمه مرة واحدة في صفحة حسابك على ','\nRedeem it once on your dashboard at '],
   ['أهلاً بك في AIM8. سجل حسابك في ','Welcome to AIM8. Create an account at '],
   [' ثم اختَر باقة Telegram Stars من الموقع.',' and choose a Telegram Stars plan on the website.'],
   ['افتح حسابك في ','Open your account at '],
