@@ -21,7 +21,7 @@ const fragments = [
   ['تم حفظ باقة ','Saved plan '],
   ['تم تسجيل Webhook على: ','Webhook registered at: '],
   [' — هذه الصفحة للمدير فقط.',' — this page is restricted to admins.'],
-  ['\\nالمستخدم: ','\\nUser: '],
+  ['\nالمستخدم: ','\nUser: '],
   ['رد الإدارة: ','Admin reply: '],
   ['الرد السابق: ','Previous reply: '],
   [' يومًا',' days'],
@@ -43,7 +43,7 @@ function phrase(value){
   const exact=en[trimmed];
   if(exact)return value.replace(trimmed,exact);
   // Translate server messages and interpolated texts (dates, names, plan prices).
-  if(!/[\\u0600-\\u06ff]/.test(value))return value;
+  if(!/[\u0600-\u06ff]/.test(value))return value;
   let output=value;
   for(const [from,to] of fragments)if(output.includes(from))output=output.split(from).join(to);
   return output;
