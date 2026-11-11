@@ -4,7 +4,7 @@ import {telegramText} from './telegram-locale.js';
 
 const site = 'https://8aim.site';
 
-async function telegram(env, method, args) {
+export async function telegram(env, method, args) {
   if (!env.TELEGRAM_BOT_TOKEN) fail('BOT_NOT_CONFIGURED', 'توكن تيليجرام غير مضبوط', 503);
   const response = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/' + method, {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -181,7 +181,7 @@ async function onPreCheckout(env, q) {
   });
 }
 
-async function applyRefund(env, charge, user) {
+export async function applyRefund(env, charge, user) {
   const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE telegram_charge_id=?').bind(charge).first();
   const event = await env.DB.prepare('SELECT * FROM telegram_refund_inbox WHERE telegram_charge_id=?').bind(charge).first();
   if (!order || !event) return false;
