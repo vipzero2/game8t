@@ -72,10 +72,11 @@ export async function startLink(ctx) {
   const bot = await telegram(ctx.env, 'getMe', {});
   const username = String(bot.username || '');
   if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)) fail('BOT_USERNAME', 'اسم البوت غير صالح', 503);
-  const token = randomToken(24);
+  // 72-bit one-time pairing code works both in Telegram deep links and manually.
+  const token = randomToken(9);
   await ctx.env.DB.prepare('INSERT INTO telegram_links(token_hash,user_id,plan_id,expires_at,created_at) VALUES(?,?,?,?,?)')
     .bind(await sha256(token), user.id, 'quarter', now() + 600, now()).run();
-  return json({ ok: true, url: 'https://t.me/' + username + '?start=' + token, expiresIn: 600 });
+  return json({ ok: true, url: 'https://t.me/' + username + '?start=' + token, linkCode: token, expiresIn: 600 });
 }
 
 export async function redeem(ctx) {
@@ -120,10 +121,10 @@ async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجّل دخولك في ' + site + ' ثم اضغط الحصول على كود التفعيل لربط حسابك.', null, message.from);
+    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجّل دخولك في ' + site + ' ثم اضغط الحصول على كود التفعيل، وبعدها انسخ رمز ربط تيليجرام من الموقع وأرسله هنا.', null, message.from);
     return showBotPlans(env, chat, message.from);
   }
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token))
+  if (!/^[A-Za-z0-9_-]{12,64}$/.test(token))
     return send(env, chat, 'رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.',null,message.from);
   const hashed = await sha256(token);
   const link = await env.DB.prepare('SELECT * FROM telegram_links WHERE token_hash=? AND expires_at>? AND used_at IS NULL').bind(hashed, now()).first();
@@ -227,6 +228,13 @@ async function onMessage(env, m) {
     return send(env, m.chat.id, 'لدعم الدفع والاسترجاع: افتح ' + site + '/support.html وسجّل تذكرة بحسابك. احتفظ بإيصال تيليجرام.',null,m.from);
   const match = text.match(/^\/start(?:@\w+)?(?:\s+([A-Za-z0-9_-]+))?$/);
   if (match) return onStart(env, m, match[1] || '');
+  // Some Telegram clients open an already-started bot without preserving
+  // the deep-link payload. Let the account owner paste the one-time code.
+  const manual = text.match(/^\/(?:link|connect)(?:@\w+)?\s+([A-Za-z0-9_-]{12,64})$/i)
+    || text.match(/^([A-Za-z0-9_-]{12,64})$/);
+  if (manual) return onStart(env, m, manual[1]);
+  if (/^\/(?:link|connect)(?:@\w+)?$/i.test(text))
+    return send(env, m.chat.id, 'انسخ رمز ربط تيليجرام من موقع AIM8 وأرسله هنا برسالة واحدة.', null, m.from);
 }
 
 async function onCallback(env, q) {
