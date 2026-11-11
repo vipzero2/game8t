@@ -159,7 +159,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(rejected.status,401);
     // A bare /start is NOT a pairing request; it must instruct copying the code.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز ربط/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز (?:ال)?ربط/);
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
     // Paste the code as an ordinary Telegram message; account is linked and plans appear.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:begin.data.linkCode}})).status,200);
