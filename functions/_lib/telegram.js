@@ -210,6 +210,53 @@ async function applyRefund(env, charge, user) {
   return true;
 }
 
+// Administrative refunds: only a verified real Telegram charge can be
+// refunded. The caller provides an AIM8 order ID, never a Telegram user ID or
+// arbitrary charge. Remove this specific grant as soon as Telegram confirms.
+export async function listTelegramOrders(ctx) {
+  await requireAdmin(ctx);
+  const orders=(await ctx.env.DB.prepare(
+    "SELECT o.id,o.plan_id,o.duration_days,o.stars_amount,o.status,o.paid_at,o.redeemed_at,o.refunded_at,o.created_at,u.email FROM telegram_orders o JOIN users u ON u.id=o.user_id ORDER BY o.created_at DESC LIMIT 100"
+  ).all()).results;
+  return json({ok:true,orders});
+}
+
+export async function adminRefund(ctx) {
+  const admin=await requireAdmin(ctx);
+  const data=await body(ctx.request);
+  const orderId=String(data.orderId||'').trim(),reason=String(data.reason||'').trim();
+  if (!/^ts_[A-Za-z0-9_-]{8,100}$/.test(orderId) || reason.length<5 || reason.length>250)
+    fail('VALIDATION','اختر طلباً صالحاً واكتب سبب الاسترجاع (5 أحرف على الأقل)',400);
+  const order=await ctx.env.DB.prepare(
+    'SELECT id,user_id,telegram_user_id,telegram_charge_id,status,stars_amount FROM telegram_orders WHERE id=?'
+  ).bind(orderId).first();
+  if (!order) fail('ORDER_NOT_FOUND','طلب تيليجرام غير موجود',404);
+  if (order.status==='refunded') return json({ok:true,alreadyRefunded:true});
+  if (!['paid','redeemed'].includes(order.status) || !order.telegram_charge_id)
+    fail('ORDER_NOT_PAID','الطلب لم يُدفع أو ليس صالحاً للاسترجاع',409);
+  if (!/^[1-9][0-9]{0,15}$/.test(order.telegram_user_id) ||
+      !Number.isSafeInteger(Number(order.telegram_user_id)))
+    fail('TELEGRAM_USER_INVALID','معرّف تيليجرام غير صالح',409);
+  // Telegram's success is authoritative for refunding Stars; a support
+  // request alone must NEVER cancel a paying customer's subscription.
+  const accepted=await telegram(ctx.env,'refundStarPayment',{
+    user_id:Number(order.telegram_user_id),
+    telegram_payment_charge_id:order.telegram_charge_id
+  });
+  if (accepted!==true) fail('TELEGRAM_REFUND_FAILED','لم يؤكد تيليجرام استرجاع النجوم',502);
+  // Reconcile immediately even if Telegram's refunded_payment webhook
+  // is delayed or never received for this merchant-initiated refund.
+  await ctx.env.DB.prepare(
+    "INSERT OR IGNORE INTO telegram_refund_inbox(telegram_charge_id,telegram_user_id,currency,stars_amount,payload,received_at) VALUES(?,?,?,?,?,?)"
+  ).bind(order.telegram_charge_id,order.telegram_user_id,'XTR',order.stars_amount,order.id,now()).run();
+  const applied=await applyRefund(ctx.env,order.telegram_charge_id);
+  if (!applied) fail('REFUND_SYNC_FAILED','تم الاسترجاع في تيليجرام لكن تحديث الاشتراك تعثر؛ راجع سجلات السيرفر',500);
+  await ctx.env.DB.prepare(
+    'INSERT INTO audit_log(id,admin_id,target_id,action,info,created_at) VALUES(?,?,?,?,?,?)'
+  ).bind(uid(),admin.id,order.user_id,'telegram_refund',order.id+': '+reason,now()).run();
+  return json({ok:true,orderId,starsRefunded:order.stars_amount,subscriptionRevoked:true});
+}
+
 async function onPaid(env, m, pay) {
   const tgId = fromId(m.from?.id), chat = fromId(m.chat?.id), id = String(pay.invoice_payload || '');
   const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(id).first();
