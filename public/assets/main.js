@@ -15,14 +15,30 @@ const tr=value=>window.AIM8_I18N?.translate(value)||value;
 const fmtTime=ts=>ts?new Date(ts*1000).toLocaleDateString(userLang==='ar'?'ar-IQ':'en-US',{year:'numeric',month:'short',day:'numeric'}):'—';
 const fmtMoney=cents=>Number.isInteger(cents)&&cents>=100?'$'+(cents/100).toFixed(2):'السعر قريبًا';
 const names={week:'الأسبوعية (قديمة)',month:'الشهرية (قديمة)',quarter:'3 أشهر',half:'6 أشهر',year:'سنة كاملة'};
-async function api(path,options={}){let response;try{response=await fetch('/api'+path,{...options,credentials:'same-origin',headers:{'content-type':'application/json',...(options.headers||{})}})}catch{throw Error('تعذّر الاتصال بالسيرفر. افتح الموقع بعد ربط Cloudflare وD1.')}let data;try{data=await response.json()}catch{throw Error('رد غير متوقع من السيرفر. تحقق من ربط Pages Functions.')}if(!response.ok||!data.ok)throw Error(data.message||'تعذّرت العملية');return data}
+async function api(path,options={}){let response;try{response=await fetch('/api'+path,{...options,credentials:'same-origin',headers:{'content-type':'application/json',...(options.headers||{})}})}catch{throw Error('تعذّر الاتصال بالسيرفر. افتح الموقع بعد ربط Cloudflare وD1.')}let data;try{data=await response.json()}catch{throw Error('رد غير متوقع من السيرفر. تحقق من ربط Pages Functions.')}if(!response.ok||!data.ok){const err=Error(data.message||'تعذّرت العملية');err.status=response.status;throw err;}return data}
 async function post(path,payload){return api(path,{method:'POST',body:JSON.stringify(payload||{})})}
 function setBusy(button,busy,loading='جارٍ التنفيذ...'){if(!button)return;if(busy){button.dataset.original=button.textContent;button.disabled=true;button.textContent=loading;}else{button.disabled=false;button.textContent=button.dataset.original||button.textContent;}}
 function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefined&&txt!==null)node.textContent=String(txt);if(cls)node.className=cls;return node}
 // Website doesn't display payment amounts or let the user choose a plan.
 // The linked Telegram bot owns the package picker and the official invoice.
 async function loadPlans(){return null;}
-async function homeInit(){}
+async function openActivationBot(button,errorNode){
+ setBusy(button,true,'جارٍ فتح بوت تيليجرام...');
+ try{
+  const data=await post('/telegram/link',{});
+  const url=new URL(data.url);
+  if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
+  location.assign(url.href);
+ }catch(err){
+  if(err.status===401){location.assign('auth.html?next=dashboard.html');return;}
+  if(errorNode)errorNode.textContent=err.message;
+  else openDialog('تعذّر فتح البوت',err.message);
+ }finally{setBusy(button,false);}
+}
+async function homeInit(){
+ const button=$('botActivateHome');
+ button?.addEventListener('click',event=>{event.preventDefault();openActivationBot(button,null);});
+}
 let mode=params.get('mode')==='signup'?'signup':'login';
 function setMode(next){mode=next;const signup=next==='signup';$('tabLogin').classList.toggle('active',!signup);$('tabSignup').classList.toggle('active',signup);$('tabLogin').setAttribute('aria-pressed',String(!signup));$('tabSignup').setAttribute('aria-pressed',String(signup));$('nameWrap').hidden=!signup;$('confirmWrap').hidden=!signup;$('authSubmit').textContent=signup?'إنشاء الحساب ←':'تسجيل الدخول ←';$('password').autocomplete=signup?'new-password':'current-password';$('confirm').required=signup;$('userName').required=signup;}
 async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=next==='dashboard.html'?'dashboard.html':'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
@@ -36,16 +52,7 @@ async function checkoutInit(){ location.replace('dashboard.html#telegramActivati
 async function starsInit(){
  const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
  if(!start||!redeem)return;
- start.addEventListener('click',async()=>{
-   setBusy(start,true,'جارٍ فتح بوت تيليجرام...');
-   try{
-     const data=await post('/telegram/link',{});
-     const url=new URL(data.url);
-     if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
-     location.assign(url.href);
-   }catch(e){result.textContent=e.message;}
-   finally{setBusy(start,false);}
- });
+ start.addEventListener('click',()=>openActivationBot(start,result));
  redeem.addEventListener('click',async()=>{
    const code=$('starsCode').value.trim();
    if(!code){result.textContent='أدخل الكود أولاً';return;}
