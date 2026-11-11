@@ -63,15 +63,18 @@ async function sendInvoice(env, chatId, telegramId, planId, user) {
 export async function startLink(ctx) {
   const user = await currentUser(ctx);
   if (!user.email_verified) fail('EMAIL_UNVERIFIED', 'أكد بريدك أولاً', 403);
-  const d = await body(ctx.request);
-  const plan = await ctx.env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(String(d.planId || '')).first();
-  if (!goodPlan(plan)) fail('PLAN_DISABLED', 'هذه الباقة غير مفعلة للنجوم بعد');
+  // The website never chooses a package. The Telegram bot offers the
+  // enabled 90/180/365-day packages after this account-bound link is used.
+  // A historical plan_id is required by migration 003's non-null FK.
+  // Store the existing quarter ID only as a compatibility placeholder.
+  // The bot never uses telegram_links.plan_id to create an invoice.
+  await body(ctx.request);
   const bot = await telegram(ctx.env, 'getMe', {});
   const username = String(bot.username || '');
   if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)) fail('BOT_USERNAME', 'اسم البوت غير صالح', 503);
   const token = randomToken(24);
   await ctx.env.DB.prepare('INSERT INTO telegram_links(token_hash,user_id,plan_id,expires_at,created_at) VALUES(?,?,?,?,?)')
-    .bind(await sha256(token), user.id, plan.id, now() + 600, now()).run();
+    .bind(await sha256(token), user.id, 'quarter', now() + 600, now()).run();
   return json({ ok: true, url: 'https://t.me/' + username + '?start=' + token, expiresIn: 600 });
 }
 
@@ -105,30 +108,36 @@ export async function redeem(ctx) {
   return json({ ok: true, subscriptionUntil: updated.subscription_until, days: order.duration_days });
 }
 
+async function showBotPlans(env, chat, user) {
+  const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
+  if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.', null, user);
+  return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
+    inline_keyboard: plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
+  }, user);
+}
+
 async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.',null,message.from);
-    const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
-    if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.',null,message.from);
-    return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
-      inline_keyboard: plans.map(p => [{ text: telegramText(p.name,message.from) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
-    }, message.from);
+    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.', null, message.from);
+    return showBotPlans(env, chat, message.from);
   }
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return send(env, chat, 'رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.',null,message.from);
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token))
+    return send(env, chat, 'رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.',null,message.from);
   const hashed = await sha256(token);
   const link = await env.DB.prepare('SELECT * FROM telegram_links WHERE token_hash=? AND expires_at>? AND used_at IS NULL').bind(hashed, now()).first();
   if (!link) return send(env, chat, 'انتهت صلاحية الربط. ارجع لموقع AIM8 وابدأ من جديد.',null,message.from);
   const consumed = await env.DB.prepare('UPDATE telegram_links SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at>?')
     .bind(now(), hashed, now()).run();
-  if (consumed.meta.changes !== 1) return send(env, chat, 'الرابط مستخدم. اطلب رابط جديد من الموقع.',null,message.from);
+  if (consumed.meta.changes !== 1)
+    return send(env, chat, 'الرابط مستخدم. اطلب رابط جديد من الموقع.',null,message.from);
   await env.DB.prepare('INSERT OR IGNORE INTO telegram_accounts(telegram_user_id,user_id,chat_id,linked_at) VALUES(?,?,?,?)')
     .bind(tgId, link.user_id, chat, now()).run();
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
   if (!account || account.user_id !== link.user_id || account.chat_id !== chat)
     return send(env, chat, 'حساب تيليجرام هذا مربوط بحساب AIM8 مختلف، أو حسابك مربوط بتيليجرام آخر. تواصل مع الدعم.',null,message.from);
-  await sendInvoice(env, chat, tgId, link.plan_id,message.from);
+  return showBotPlans(env, chat, message.from);
 }
 
 async function onPreCheckout(env, q) {
