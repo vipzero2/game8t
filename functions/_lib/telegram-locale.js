@@ -17,6 +17,12 @@ const dictionary=new Map([
   ['انتهت صلاحية الكود','Activation code expired'],
   ['الكود مستخدم؛ حدّث الصفحة ثم افحص الاشتراك','Code already redeemed; refresh and check your subscription'],
   ['اشتراكات النجوم غير مفعلة بعد.','Stars subscriptions are not available yet.'],
+  ['اختر باقة أو استرجع كود التفعيل مجاناً. لا تحتاج حساباً بالموقع:','Choose one of the three plans or recover your activation code for free. No website account required:'],
+  ['♻️ استرجاع التفعيل مجاناً','♻️ Recover activation for free'],
+  ['نعم، استرجاع التفعيل مجاناً','Yes, recover activation for free'],
+  ['تأكيد الاسترجاع المجاني؟ سيتم إيقاف الجهاز القديم وحرق الكود السابق مع بقاء الاشتراك.','Confirm free recovery? The previous device and code will be invalidated, but your subscription remains.'],
+  ['ما عندك اشتراك مدفوع صالح للاسترجاع','You have no active paid subscription to recover'],
+
   ['اختر الباقة لحساب AIM8 المرتبط:','Select a plan for your linked AIM8 account:'],
   ['اختر إحدى الباقات الثلاث. لإكمال الدفع، اربط حساب AIM8 بالبوت عبر رابط الموقع أو أرسل رمز الربط من صفحة حسابك.','Choose one of the three plans. Before paying, link your AIM8 account through the website or send the pairing code from your account dashboard.'],
   ['رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.','Invalid link. Return to AIM8 to get a new link.'],
@@ -38,6 +44,10 @@ const phrases=[
   ['تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n','Payment successful ✅\nYour AIM8 activation code:\n'],
   ['\n\nصالح حتى ','\n\nValid until '],
   ['\nاستخدمه مرة واحدة في صفحة حسابك على ','\nRedeem it once on your dashboard at '],
+  ['\nأدخل الكود داخل تطبيق AIM8. إذا بدلت هاتفك أو نسيت الكود أرسل /recover لاسترجاعه مجاناً.','\nEnter this code in AIM8. If you change phones or lose the code, send /recover for a free replacement.'],
+  ['تم إصدار كود جديد مجاناً ✅\nكود AIM8:\n','New free activation code ✅\nYour AIM8 code:\n'],
+  ['\n\nالكود القديم محروق والجهاز السابق مفصول عن السيرفر. اشتراكك ومدته محفوظان. أدخل الكود داخل التطبيق خلال 24 ساعة.','\n\nThe old code and device authorization are revoked. Your remaining subscription is preserved. Enter this code in the app within 24 hours.'],
+
   ['أهلاً بك في AIM8. سجّل دخولك في ','Welcome to AIM8. Sign in at '],
   [' ثم اضغط الحصول على كود التفعيل، وبعدها انسخ رمز ربط تيليجرام من الموقع وأرسله هنا.',' then tap Get Activation Code. Copy the Telegram pairing code from the site and send it here.'],
   ['افتح حسابك في ','Open your account at '],

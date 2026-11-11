@@ -1,6 +1,7 @@
 import { ApiError, body, constantTime, currentUser, enc, fail, hmac, json, now, randomToken, requireAdmin, sha256, uid, base64url } from './common.js';
 import { entitlementEndSql } from './grants.js';
 import {telegramText} from './telegram-locale.js';
+import {ensureTelegramAccount,ensureLicenseSchema,issuePaidCode,recoverCode} from './telegram-license.js';
 
 const site = 'https://8aim.site';
 
@@ -38,11 +39,9 @@ function goodPlan(p) {
   return p && ['quarter', 'half', 'year'].includes(p.id) && p.stars_enabled === 1 && Number.isSafeInteger(p.stars_price) && p.stars_price > 0;
 }
 async function sendInvoice(env, chatId, telegramId, planId, user) {
-  const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(telegramId).first();
-  if (!account || account.chat_id !== chatId) {
-    await send(env, chatId, 'افتح حسابك في ' + site + ' ثم اضغط الحصول على كود التفعيل لربط الحساب.', null, user);
-    return;
-  }
+  // Bot identity comes from the authenticated private Telegram webhook.
+  // New buyers receive a passwordless license account automatically.
+  const account = await ensureTelegramAccount(env,telegramId,chatId,user);
   const plan = await env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(planId).first();
   if (!goodPlan(plan)) {
     await send(env, chatId, 'الباقة غير مفعلة للدفع بالنجوم حالياً.', null, user);
@@ -138,17 +137,19 @@ export async function redeem(ctx) {
 
 async function showBotPlans(env, chat, user, needsLink=false) {
   const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
-  if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.', null, user);
-  return send(env, chat, needsLink ? 'اختر إحدى الباقات الثلاث. لإكمال الدفع، اربط حساب AIM8 بالبوت عبر رابط الموقع أو أرسل رمز الربط من صفحة حسابك.' : 'اختر الباقة لحساب AIM8 المرتبط:', {
-    inline_keyboard: plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
+  // Keep free recovery available even when new plans are disabled.
+  return send(env, chat, 'اختر باقة أو استرجع كود التفعيل مجاناً. لا تحتاج حساباً بالموقع:', {
+    inline_keyboard: [
+      ...plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }]),
+      [{text:telegramText('♻️ استرجاع التفعيل مجاناً',user),callback_data:'recover:ask'}]
+    ]
   }, user);
 }
 
 async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
-    const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return showBotPlans(env, chat, message.from, true);
+    await ensureTelegramAccount(env,tgId,chat,message.from);
     return showBotPlans(env, chat, message.from);
   }
   if (!/^[A-Za-z0-9_-]{12,64}$/.test(token))
@@ -160,6 +161,17 @@ async function onStart(env, message, token) {
     .bind(now(), hashed, now()).run();
   if (consumed.meta.changes !== 1)
     return send(env, chat, 'الرابط مستخدم. اطلب رابط جديد من الموقع.',null,message.from);
+  // Allow an unused, passwordless bot placeholder to be upgraded to a
+  // legacy website account without losing any paid Telegram subscriptions.
+  const prior=await env.DB.prepare('SELECT user_id FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
+  if(prior?.user_id==='telegram:'+tgId && prior.user_id!==link.user_id){
+    const anyPurchase=await env.DB.prepare('SELECT id FROM telegram_orders WHERE user_id=? LIMIT 1').bind(prior.user_id).first();
+    if(!anyPurchase){
+      await env.DB.prepare('UPDATE telegram_accounts SET user_id=? WHERE telegram_user_id=? AND user_id=?')
+        .bind(link.user_id,tgId,prior.user_id).run();
+      await env.DB.prepare('DELETE FROM users WHERE id=?').bind(prior.user_id).run();
+    }
+  }
   await env.DB.prepare('INSERT OR IGNORE INTO telegram_accounts(telegram_user_id,user_id,chat_id,linked_at) VALUES(?,?,?,?)')
     .bind(tgId, link.user_id, chat, now()).run();
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
@@ -177,7 +189,7 @@ async function onPreCheckout(env, q) {
     q.currency === 'XTR' && q.total_amount === order.stars_amount;
   await telegram(env, 'answerPreCheckoutQuery', {
     pre_checkout_query_id: q.id, ok: !!valid,
-    ...(!valid ? { error_message: telegramText('الفاتورة غير صالحة أو انتهت صلاحيتها. افتح رابط شراء جديد من موقع AIM8.',q.from) } : {})
+    ...(!valid ? { error_message: telegramText('الفاتورة غير صالحة أو انتهت صلاحيتها. افتح /start واطلب فاتورة جديدة.',q.from) } : {})
   });
 }
 
@@ -192,6 +204,7 @@ export async function applyRefund(env, charge, user) {
     return false;
   }
   if (order.status === 'refunded') return true;
+  await ensureLicenseSchema(env);
   const t = now(), nonce = uid();
   const result = await env.DB.batch([
     env.DB.prepare("UPDATE telegram_orders SET status='refunded',refunded_at=?,refund_nonce=? WHERE id=? AND telegram_charge_id=? AND status IN ('paid','redeemed')")
@@ -200,7 +213,9 @@ export async function applyRefund(env, charge, user) {
       .bind(t, order.id, order.id, nonce),
     env.DB.prepare('UPDATE users SET subscription_until=' + entitlementEndSql +
       " WHERE id=? AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded' AND redeemed_at IS NOT NULL)")
-      .bind(order.user_id, order.id, nonce)
+      .bind(order.user_id, order.id, nonce),
+    env.DB.prepare("UPDATE telegram_device_codes SET expires_at=?,used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded')")
+      .bind(t,t,order.user_id,order.code_hash||'',order.id,nonce)
   ]);
   if (result[0]?.meta?.changes === 1) {
     // Delivery errors should not undo the refund already recorded in D1.
@@ -269,8 +284,9 @@ async function onPaid(env, m, pay) {
   const charge = String(pay.telegram_payment_charge_id);
   const code = await codeFor(env, charge), hash = await sha256(code);
   if (order.status === 'pending') {
-    await env.DB.prepare("UPDATE telegram_orders SET status='paid',paid_at=?,telegram_charge_id=?,code_hash=?,code_expires_at=? WHERE id=? AND status='pending'")
+    const paid=await env.DB.prepare("UPDATE telegram_orders SET status='paid',paid_at=?,telegram_charge_id=?,code_hash=?,code_expires_at=? WHERE id=? AND status='pending'")
       .bind(now(), charge, hash, now() + 86400, order.id).run();
+    if(paid.meta.changes===1)await issuePaidCode(env,tgId,order.user_id,code);
   }
   const current = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (current.telegram_charge_id !== charge) throw new ApiError(409, 'CHARGE_MISMATCH', 'Charge ID mismatch');
@@ -281,7 +297,7 @@ async function onPaid(env, m, pay) {
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
   await send(env, chat, 'تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n' + code +
     '\n\nصالح حتى ' + new Date(after.code_expires_at * 1000).toISOString() +
-    '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/activate.html',null,m.from);
+    '\nأدخل الكود داخل تطبيق AIM8. إذا بدلت هاتفك أو نسيت الكود أرسل /recover لاسترجاعه مجاناً.',null,m.from);
 }
 
 async function onRefund(env, m, pay) {
@@ -298,6 +314,10 @@ async function onMessage(env, m) {
   if (m.successful_payment) return onPaid(env, m, m.successful_payment);
   if (m.refunded_payment) return onRefund(env, m, m.refunded_payment);
   const text = String(m.text || '').trim();
+  if (/^\/(?:recover|restore)(?:@\w+)?\b/i.test(text))
+    return send(env,m.chat.id,'تأكيد الاسترجاع المجاني؟ سيتم إيقاف الجهاز القديم وحرق الكود السابق مع بقاء الاشتراك.',{
+      inline_keyboard:[[{text:telegramText('نعم، استرجاع التفعيل مجاناً',m.from),callback_data:'recover:confirm'}]]
+    },m.from);
   if (/^\/paysupport(?:@\w+)?\b/i.test(text))
     return send(env, m.chat.id, 'لدعم الدفع والاسترجاع: افتح ' + site + '/support.html وسجّل تذكرة بحسابك. احتفظ بإيصال تيليجرام.',null,m.from);
   const match = text.match(/^\/start(?:@\w+)?(?:\s+([A-Za-z0-9_-]+))?$/);
@@ -307,12 +327,34 @@ async function onMessage(env, m) {
   const manual = text.match(/^\/(?:link|connect)(?:@\w+)?\s+([A-Za-z0-9_-]{12,64})$/i)
     || text.match(/^([A-Za-z0-9_-]{12,64})$/);
   if (manual) return onStart(env, m, manual[1]);
+  if(/^\/code(?:@\w+)?\b/i.test(text))
+    return send(env,m.chat.id,'للحصول على كود جديد مجاناً أرسل /recover ثم أكد نقل الجهاز.',null,m.from);
   if (/^\/(?:link|connect)(?:@\w+)?$/i.test(text))
     return send(env, m.chat.id, 'انسخ رمز ربط تيليجرام من موقع AIM8 وأرسله هنا برسالة واحدة.', null, m.from);
 }
 
 async function onCallback(env, q) {
   if (q.message?.chat?.type !== 'private' || !q.from) return;
+  const recovery=String(q.data||'').match(/^recover:(ask|confirm)$/);
+  if(recovery){
+    const seen=await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
+      .bind(q.id,now()).run();
+    if(seen.meta.changes!==1)return;
+    await telegram(env,'answerCallbackQuery',{callback_query_id:q.id});
+    if(recovery[1]==='ask')return send(env,q.message.chat.id,
+      'تأكيد الاسترجاع المجاني؟ سيتم إيقاف الجهاز القديم وحرق الكود السابق مع بقاء الاشتراك.',{
+        inline_keyboard:[[{text:telegramText('نعم، استرجاع التفعيل مجاناً',q.from),callback_data:'recover:confirm'}]]
+      },q.from);
+    try{
+      const result=await recoverCode(env,fromId(q.from.id),fromId(q.message.chat.id));
+      return send(env,q.message.chat.id,
+        'تم إصدار كود جديد مجاناً ✅\nكود AIM8:\n'+result.code+
+        '\n\nالكود القديم محروق والجهاز السابق مفصول عن السيرفر. اشتراكك ومدته محفوظان. أدخل الكود داخل التطبيق خلال 24 ساعة.',null,q.from);
+    }catch(e){
+      if(e instanceof ApiError)return send(env,q.message.chat.id,e.message,null,q.from);
+      throw e;
+    }
+  }
   const cb = String(q.data || '').match(/^buy:(quarter|half|year)$/);
   if (!cb) return telegram(env, 'answerCallbackQuery', { callback_query_id: q.id, text: telegramText('خيار غير متاح',q.from) });
   const seen = await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
