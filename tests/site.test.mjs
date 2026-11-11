@@ -137,6 +137,8 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const begin=await send('POST','/telegram/link',{},userCookie);
     assert.equal(begin.ans.status,200);
     const token=new URL(begin.data.url).searchParams.get('start');
+    assert.equal(begin.data.linkCode,token);
+    assert.match(token,/^[A-Za-z0-9_-]{12}$/);
     const secret=base64url(await hmac(env.SESSION_SECRET,'aim8:telegram:webhook:v1'));
     const event=async(update)=>{
       const req=new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json','X-Telegram-Bot-Api-Secret-Token':secret},body:JSON.stringify(update)});
@@ -144,7 +146,16 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     };
     const rejected=await onRequest({request:new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
     assert.equal(rejected.status,401);
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start '+token}})).status,200);
+    // A bare /start is NOT a pairing request; it must instruct copying the code.
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}})).status,200);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز ربط/);
+    assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
+    // Paste the code as an ordinary Telegram message; account is linked and plans appear.
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:begin.data.linkCode}})).status,200);
+    // A new deep link still works in clients that preserve the /start payload.
+    const second=await send('POST','/telegram/link',{},userCookie);
+    const secondToken=new URL(second.data.url).searchParams.get('start');
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start '+secondToken}})).status,200);
     // No invoice may be sent until the buyer selects their plan INSIDE Telegram.
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
     const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
