@@ -159,7 +159,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
     const credited=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(credited.ans.status,200);
-    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+7*86400);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+7*86400);assert.equal(db0.prepare("SELECT COUNT(*) c FROM subscription_grants WHERE user_id=? AND source='oxapay'").get(target.id).c,1);
     const reused=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(reused.ans.status,400);
     const refund={...payment};
