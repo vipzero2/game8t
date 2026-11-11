@@ -297,10 +297,14 @@ async function onPaid(env, m, pay) {
   }
   const charge = String(pay.telegram_payment_charge_id);
   const code = await codeFor(env, charge), hash = await sha256(code);
+  let newlyPaid=false;
   if (order.status === 'pending') {
     const paid=await env.DB.prepare("UPDATE telegram_orders SET status='paid',paid_at=?,telegram_charge_id=?,code_hash=?,code_expires_at=? WHERE id=? AND status='pending'")
       .bind(now(), charge, hash, now() + 86400, order.id).run();
-    if(paid.meta.changes===1)await issuePaidCode(env,tgId,order.user_id,code);
+    if(paid.meta.changes===1){
+      await issuePaidCode(env,tgId,order.user_id,code);
+      newlyPaid=true;
+    }
   }
   const current = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (current.telegram_charge_id !== charge) throw new ApiError(409, 'CHARGE_MISMATCH', 'Charge ID mismatch');
@@ -309,6 +313,9 @@ async function onPaid(env, m, pay) {
   const after = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (after.status === 'refunded' || after.status === 'redeemed') return;
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
+  // Duplicate payment delivery must not resurface an old, burned code after
+  // the customer has used /recover to rotate the device and activation code.
+  if(!newlyPaid)return;
   const chosen=await getBotLanguage(env,tgId)||'en';
   await send(env,chat,
     [t(chosen,'paid'),t(chosen,'code'),code,
