@@ -137,7 +137,7 @@ export async function redeem(ctx) {
 
 async function showBotPlans(env, chat, user, needsLink=false) {
   const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
-  if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.', null, user);
+  // Keep free recovery available even when new plans are disabled.
   return send(env, chat, 'اختر باقة أو استرجع كود التفعيل مجاناً. لا تحتاج حساباً بالموقع:', {
     inline_keyboard: [
       ...plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }]),
