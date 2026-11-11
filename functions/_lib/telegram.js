@@ -2,6 +2,7 @@ import { ApiError, body, constantTime, currentUser, enc, fail, hmac, json, now, 
 import { entitlementEndSql } from './grants.js';
 import {telegramText} from './telegram-locale.js';
 import {ensureTelegramAccount,ensureLicenseSchema,issuePaidCode,recoverCode} from './telegram-license.js';
+import {getBotLanguage,setBotLanguage,languagePicker,t,planLabel,codeKeyboard} from './telegram-bot-ui.js';
 
 const site = 'https://8aim.site';
 
@@ -20,7 +21,16 @@ export async function telegram(env, method, args) {
 }
 
 async function send(env, chat, text, markup, user) {
-  return telegram(env, 'sendMessage', { chat_id: chat, text:telegramText(text,user), ...(markup ? { reply_markup: markup } : {}) });
+  const chosen=await getBotLanguage(env,fromId(user?.id||chat));
+  return telegram(env, 'sendMessage', {
+    chat_id:chat,
+    text:telegramText(text,chosen?{language_code:chosen}:user),
+    ...(markup?{reply_markup:markup}:{})
+  });
+}
+async function sendLanguagePicker(env,chat,user){
+  return send(env,chat,'🌍 اختر اللغة | Choose your language | Selecciona idioma',
+    languagePicker(),user);
 }
 function codeFor(env, chargeId) {
   return hmac(env.SESSION_SECRET, 'aim8:stars:code:v1:' + chargeId)
@@ -42,17 +52,16 @@ async function sendInvoice(env, chatId, telegramId, planId, user) {
   // Bot identity comes from the authenticated private Telegram webhook.
   // New buyers receive a passwordless license account automatically.
   const account = await ensureTelegramAccount(env,telegramId,chatId,user);
+  const chosen=await getBotLanguage(env,telegramId);
+  if(!chosen)return sendLanguagePicker(env,chatId,user);
   const plan = await env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(planId).first();
-  if (!goodPlan(plan)) {
-    await send(env, chatId, 'الباقة غير مفعلة للدفع بالنجوم حالياً.', null, user);
-    return;
-  }
+  if (!goodPlan(plan))return send(env,chatId,t(chosen,'unavailable'),null,user);
   const orderId = 'ts_' + uid();
   await env.DB.prepare('INSERT INTO telegram_orders(id,user_id,telegram_user_id,chat_id,plan_id,duration_days,stars_amount,created_at) VALUES(?,?,?,?,?,?,?,?)')
     .bind(orderId, account.user_id, telegramId, chatId, plan.id, plan.days, plan.stars_price, now()).run();
   await telegram(env, 'sendInvoice', {
-    chat_id: chatId, title: 'AIM8 - ' + telegramText(plan.name,user),
-    description: telegramText('اشتراك AIM8 لمدة ' + plan.days + ' يوم. يصدر كود صالح 24 ساعة بعد الدفع.',user),
+    chat_id:chatId,title:'AIM8 - '+planLabel(chosen,plan.id),
+    description:t(chosen,'invoice',{days:plan.days}),
     payload: orderId, currency: 'XTR',
     prices: [{ label: telegramText(plan.name,user), amount: plan.stars_price }],
     start_parameter: 'aim8-payment'
@@ -135,15 +144,17 @@ export async function redeem(ctx) {
   return json({ ok: true, subscriptionUntil: updated.subscription_until, days: order.duration_days });
 }
 
-async function showBotPlans(env, chat, user, needsLink=false) {
-  const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
-  // Keep free recovery available even when new plans are disabled.
-  return send(env, chat, 'اختر باقة أو استرجع كود التفعيل مجاناً. لا تحتاج حساباً بالموقع:', {
-    inline_keyboard: [
-      ...plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }]),
-      [{text:telegramText('♻️ استرجاع التفعيل مجاناً',user),callback_data:'recover:ask'}]
+async function showBotPlans(env,chat,user){
+  const chosen=await getBotLanguage(env,fromId(user?.id||chat));
+  if(!chosen)return sendLanguagePicker(env,chat,user);
+  const plans=(await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
+  return send(env,chat,t(chosen,'intro'),{
+    inline_keyboard:[
+      ...plans.map(p=>[{text:planLabel(chosen,p.id)+' — '+p.stars_price+' ⭐',callback_data:'buy:'+p.id}]),
+      [{text:t(chosen,'recover'),callback_data:'recover:ask'}],
+      [{text:t(chosen,'language'),callback_data:'lang:menu'}]
     ]
-  }, user);
+  },user);
 }
 
 async function onStart(env, message, token) {
@@ -189,7 +200,7 @@ async function onPreCheckout(env, q) {
     q.currency === 'XTR' && q.total_amount === order.stars_amount;
   await telegram(env, 'answerPreCheckoutQuery', {
     pre_checkout_query_id: q.id, ok: !!valid,
-    ...(!valid ? { error_message: telegramText('الفاتورة غير صالحة أو انتهت صلاحيتها. افتح /start واطلب فاتورة جديدة.',q.from) } : {})
+    ...(!valid ? {error_message:t(await getBotLanguage(env,fromId(q.from?.id))||'en','expiredInvoice')} : {})
   });
 }
 
@@ -219,7 +230,10 @@ export async function applyRefund(env, charge, user) {
   ]);
   if (result[0]?.meta?.changes === 1) {
     // Delivery errors should not undo the refund already recorded in D1.
-    try { await send(env, order.chat_id, 'تم تسجيل استرجاع دفعة النجوم. أُلغي كود الدفع وأُزيلت مدة هذه الدفعة فقط.',null,user); }
+    try {
+      const chosen=await getBotLanguage(env,order.telegram_user_id)||'en';
+      await send(env,order.chat_id,t(chosen,'refund'),null,user);
+    }
     catch (e) { console.error('Could not notify refunded user:', String(e)); }
   }
   return true;
@@ -295,9 +309,12 @@ async function onPaid(env, m, pay) {
   const after = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (after.status === 'refunded' || after.status === 'redeemed') return;
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
-  await send(env, chat, 'تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n' + code +
-    '\n\nصالح حتى ' + new Date(after.code_expires_at * 1000).toISOString() +
-    '\nأدخل الكود داخل تطبيق AIM8. إذا بدلت هاتفك أو نسيت الكود أرسل /recover لاسترجاعه مجاناً.',null,m.from);
+  const chosen=await getBotLanguage(env,tgId)||'en';
+  await send(env,chat,
+    [t(chosen,'paid'),t(chosen,'code'),code,
+     t(chosen,'expiry',{until:new Date(after.code_expires_at*1000).toISOString()}),
+     t(chosen,'rules')].join('\n\n'),
+    codeKeyboard(chosen,code),m.from);
 }
 
 async function onRefund(env, m, pay) {
@@ -314,10 +331,15 @@ async function onMessage(env, m) {
   if (m.successful_payment) return onPaid(env, m, m.successful_payment);
   if (m.refunded_payment) return onRefund(env, m, m.refunded_payment);
   const text = String(m.text || '').trim();
-  if (/^\/(?:recover|restore)(?:@\w+)?\b/i.test(text))
-    return send(env,m.chat.id,'تأكيد الاسترجاع المجاني؟ سيتم إيقاف الجهاز القديم وحرق الكود السابق مع بقاء الاشتراك.',{
-      inline_keyboard:[[{text:telegramText('نعم، استرجاع التفعيل مجاناً',m.from),callback_data:'recover:confirm'}]]
+  if(/^\/(?:language|lang)(?:@\w+)?\b/i.test(text))
+    return sendLanguagePicker(env,m.chat.id,m.from);
+  if (/^\/(?:recover|restore)(?:@\w+)?\b/i.test(text)){
+    const chosen=await getBotLanguage(env,fromId(m.from.id));
+    if(!chosen)return sendLanguagePicker(env,m.chat.id,m.from);
+    return send(env,m.chat.id,t(chosen,'confirm'),{
+      inline_keyboard:[[{text:t(chosen,'yes'),callback_data:'recover:confirm'}]]
     },m.from);
+  }
   if (/^\/paysupport(?:@\w+)?\b/i.test(text))
     return send(env, m.chat.id, 'لدعم الدفع والاسترجاع: افتح ' + site + '/support.html وسجّل تذكرة بحسابك. احتفظ بإيصال تيليجرام.',null,m.from);
   const match = text.match(/^\/start(?:@\w+)?(?:\s+([A-Za-z0-9_-]+))?$/);
@@ -333,30 +355,51 @@ async function onMessage(env, m) {
     return send(env, m.chat.id, 'انسخ رمز ربط تيليجرام من موقع AIM8 وأرسله هنا برسالة واحدة.', null, m.from);
 }
 
-async function onCallback(env, q) {
-  if (q.message?.chat?.type !== 'private' || !q.from) return;
-  const recovery=String(q.data||'').match(/^recover:(ask|confirm)$/);
+async function onCallback(env,q){
+  if(q.message?.chat?.type!=='private'||!q.from||q.from.is_bot)return;
+  const tgId=fromId(q.from.id),chat=fromId(q.message.chat.id),data=String(q.data||'');
+  if(chat!==tgId)return;
+  if(data==='lang:menu'){
+    await telegram(env,'answerCallbackQuery',{callback_query_id:q.id});
+    return sendLanguagePicker(env,chat,q.from);
+  }
+  if(/^lang:(ar|en|es|fr|de|pt|tr|ru|fa|hi|id|ur)$/.test(data)){
+    const seen=await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
+      .bind(q.id,now()).run();
+    if(seen.meta.changes!==1)return;
+    await ensureTelegramAccount(env,tgId,chat,q.from);
+    await setBotLanguage(env,tgId,data.slice(5));
+    await telegram(env,'answerCallbackQuery',{callback_query_id:q.id});
+    return showBotPlans(env,chat,q.from);
+  }
+  const chosen=await getBotLanguage(env,tgId);
+  if(!chosen){
+    await telegram(env,'answerCallbackQuery',{callback_query_id:q.id,text:'Choose your language first'});
+    return sendLanguagePicker(env,chat,q.from);
+  }
+  const recovery=data.match(/^recover:(ask|confirm)$/);
   if(recovery){
     const seen=await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
       .bind(q.id,now()).run();
     if(seen.meta.changes!==1)return;
     await telegram(env,'answerCallbackQuery',{callback_query_id:q.id});
-    if(recovery[1]==='ask')return send(env,q.message.chat.id,
-      'تأكيد الاسترجاع المجاني؟ سيتم إيقاف الجهاز القديم وحرق الكود السابق مع بقاء الاشتراك.',{
-        inline_keyboard:[[{text:telegramText('نعم، استرجاع التفعيل مجاناً',q.from),callback_data:'recover:confirm'}]]
-      },q.from);
+    if(recovery[1]==='ask')return send(env,chat,t(chosen,'confirm'),{
+      inline_keyboard:[[{text:t(chosen,'yes'),callback_data:'recover:confirm'}]]
+    },q.from);
     try{
       const result=await recoverCode(env,fromId(q.from.id),fromId(q.message.chat.id));
-      return send(env,q.message.chat.id,
-        'تم إصدار كود جديد مجاناً ✅\nكود AIM8:\n'+result.code+
-        '\n\nالكود القديم محروق والجهاز السابق مفصول عن السيرفر. اشتراكك ومدته محفوظان. أدخل الكود داخل التطبيق خلال 24 ساعة.',null,q.from);
+      return send(env,chat,
+        [t(chosen,'replacement'),t(chosen,'code'),result.code,
+         t(chosen,'expiry',{until:new Date(result.expiresAt*1000).toISOString()}),
+         t(chosen,'replaced'),t(chosen,'rules')].join('\n\n'),
+        codeKeyboard(chosen,result.code),q.from);
     }catch(e){
-      if(e instanceof ApiError)return send(env,q.message.chat.id,e.message,null,q.from);
+      if(e instanceof ApiError)return send(env,chat,e.code==='NO_ACTIVE_LICENSE'?t(chosen,'noEntitlement'):e.message,null,q.from);
       throw e;
     }
   }
   const cb = String(q.data || '').match(/^buy:(quarter|half|year)$/);
-  if (!cb) return telegram(env, 'answerCallbackQuery', { callback_query_id: q.id, text: telegramText('خيار غير متاح',q.from) });
+  if(!cb)return telegram(env,'answerCallbackQuery',{callback_query_id:q.id,text:t(chosen,'unknown')});
   const seen = await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
     .bind(q.id, now()).run();
   if (seen.meta.changes !== 1) return;
