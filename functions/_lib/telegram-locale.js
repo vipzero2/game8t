@@ -18,6 +18,7 @@ const dictionary=new Map([
   ['الكود مستخدم؛ حدّث الصفحة ثم افحص الاشتراك','Code already redeemed; refresh and check your subscription'],
   ['اشتراكات النجوم غير مفعلة بعد.','Stars subscriptions are not available yet.'],
   ['اختر الباقة لحساب AIM8 المرتبط:','Select a plan for your linked AIM8 account:'],
+  ['اختر إحدى الباقات الثلاث. لإكمال الدفع، اربط حساب AIM8 بالبوت عبر رابط الموقع أو أرسل رمز الربط من صفحة حسابك.','Choose one of the three plans. Before paying, link your AIM8 account through the website or send the pairing code from your account dashboard.'],
   ['رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.','Invalid link. Return to AIM8 to get a new link.'],
   ['انتهت صلاحية الربط. ارجع لموقع AIM8 وابدأ من جديد.','This link has expired. Return to AIM8 and start again.'],
   ['الرابط مستخدم. اطلب رابط جديد من الموقع.','This link has already been used. Get a new one from AIM8.'],
