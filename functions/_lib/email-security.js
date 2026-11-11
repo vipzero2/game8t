@@ -11,7 +11,7 @@ export function validateNewPassword(password){
  return password;
 }
 function assertMailer(env){
- if(!env.RESEND_API_KEY||!env.EMAIL_FROM||!/^([^<>\r\n]+<)?[a-z0-9._+-]+@aim8\.site>?$/i.test(env.EMAIL_FROM))fail('EMAIL_NOT_CONFIGURED','خدمة إرسال البريد غير مفعّلة بعد',503);
+ if(!env.RESEND_API_KEY||!env.EMAIL_FROM||!/^([^<>\r\n]+<)?[a-z0-9._+-]+@8aim\.site>?$/i.test(env.EMAIL_FROM))fail('EMAIL_NOT_CONFIGURED','خدمة إرسال البريد غير مفعّلة بعد',503);
  if(!env.SESSION_SECRET||env.SESSION_SECRET.length<32)fail('CONFIG_MISSING','مفتاح أمان السيرفر غير مضبوط',503);
 }
 function makeSixDigits(){const buf=new Uint32Array(1);crypto.getRandomValues(buf);return String(buf[0]%1000000).padStart(6,'0');}
