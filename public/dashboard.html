@@ -18,6 +18,11 @@
 </div></header>
 <main><div class="container"><div class="page-top"><span class="eyebrow">لوحة التحكم</span><h1>حسابي في AIM8</h1><p>تفاصيل حسابك واشتراكك وجهاز Android المرتبط به، مباشرة من قاعدة البيانات.</p></div>
 <div class="alert info" style="margin-bottom:24px" id="accountAlert" role="status">جاري الاتصال بحسابك...</div>
+<section class="glass" style="margin-bottom:24px;padding:20px;border-color:#377b79" id="quickActivation">
+  <h2>عندك كود تفعيل من بوت تيليجرام؟</h2>
+  <p>فعّل اشتراكك من صفحة مخصصة، بدون البحث بين إعدادات الحساب.</p>
+  <a class="btn full" href="activate.html">إدخال كود التفعيل ←</a>
+</section>
 <div class="account-grid"><div class="metric"><small>حالة الاشتراك</small><strong><span class="pill orange" id="accountStatus">—</span></strong><div class="sub">بيانات توضيحية</div></div><div class="metric"><small>الباقة الحالية</small><strong id="accountPlan">—</strong><div class="sub">اختر باقة للبدء لاحقًا</div></div><div class="metric"><small>تاريخ الانتهاء</small><strong id="accountExpiry">—</strong><div class="sub">يظهر بعد التفعيل</div></div></div>
 <div class="two-cols inner-layout"><section class="glass"><h2>إدارة الاشتراك</h2><p>آخر معلومات الحساب والطلبات، مع حالة ربط الجهاز.</p><hr class="stripe-rule"><div class="order-row"><span>البريد الإلكتروني</span><strong id="accountEmail">—</strong></div><div class="order-row"><span>رقم الطلب الأخير</span><strong id="lastOrder">—</strong></div><div class="order-row"><span>تاريخ بدء الاشتراك</span><strong id="accountStart">—</strong></div><div class="order-row"><span>انتهاء الاشتراك</span><strong id="accountExpiry2">—</strong></div><div class="page-actions"><a href="index.html#pricing" class="btn">اختيار اشتراك ←</a><button id="logoutBtn" type="button" class="btn ghost">تسجيل الخروج</button><a id="adminEntry" href="admin.html" class="btn dark" hidden>لوحة الإدارة</a></div><div class="order-row"><span>الجهاز المرتبط</span><strong id="deviceStatus">—</strong></div><section class="mini-card" style="margin-top:20px"><h3>حماية الحساب وGmail</h3><p id="emailVerificationState">—</p>
 <div id="emailVerifySection" hidden><p>حسابات AIM8 القديمة تحتاج تأكيد Gmail مرة واحدة.</p><button class="btn ghost small" id="emailVerifySend" type="button">إرسال رمز تأكيد البريد</button><div class="form-group"><label for="emailVerifyCode">رمز Gmail</label><input id="emailVerifyCode" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000"></div><button class="btn small" type="button" id="emailVerifyConfirm">تأكيد البريد</button><p id="emailVerifyMessage" role="status"></p></div>
@@ -25,7 +30,7 @@
 <button type="button" id="deviceChangeSend" class="btn ghost small">أرسل رمز تغيير الجهاز</button><div class="form-group"><label for="deviceChangeCode">رمز Gmail</label><input id="deviceChangeCode" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="000000"></div>
 <button type="button" id="deviceChangeConfirm" class="btn small">تأكيد فصل الجهاز القديم</button><p id="deviceChangeMessage" role="status"></p></div>
 </section><section class="mini-card" style="margin-top:20px" id="telegramActivation">
-<h3>الحصول على كود تفعيل الحساب</h3>
+<h3>بوت تيليجرام وكود التفعيل</h3>
 <p>اضغط الزر لفتح بوت تيليجرام وربط حسابك بشكل آمن. اختر إحدى الباقات الثلاث داخل البوت، وبعد الدفع يصلك كود صالح 24 ساعة لهذا الحساب فقط.</p>
 <a class="btn full" id="starsStart" href="/api/telegram/open">الحصول على كود التفعيل عبر بوت تيليجرام ←</a>
 <a class="btn ghost full" id="botLinkBackupDash" href="#" hidden rel="noreferrer" style="margin-top:10px">فتح تيليجرام مباشرة ←</a>
@@ -37,6 +42,7 @@
   <button type="button" class="btn ghost" id="botCopyDash">نسخ الرمز</button>
   </div>
 </div>
+<div class="page-actions"><a class="btn ghost full" href="activate.html">فتح صفحة إدخال كود التفعيل ←</a></div>
 <div class="form-group" style="margin-top:20px"><label for="starsCode">كود التفعيل من البوت</label><input id="starsCode" type="text" maxlength="40" placeholder="A8-..." autocomplete="off"></div>
 <button class="btn ghost" id="starsRedeem" type="button">تفعيل الكود</button>
 <p id="starsResult" role="status"></p>
@@ -51,4 +57,4 @@
 </div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · 8aim.site</span></div></div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
-<script src="assets/main.js" defer></script></body></html>
+<script src="assets/main.js?v=activate2" defer></script></body></html>
