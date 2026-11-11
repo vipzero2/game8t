@@ -144,16 +144,16 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     };
     const rejected=await onRequest({request:new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
     assert.equal(rejected.status,401);
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},text:'/start '+token}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start '+token}})).status,200);
     const invoice=calls.find(x=>x.method==='sendInvoice');
     assert.ok(invoice,'Telegram invoice should be sent');
     assert.equal(invoice.data.currency,'XTR');assert.equal(invoice.data.prices[0].amount,150);
     const oid=invoice.data.payload;
-    assert.equal((await event({pre_checkout_query:{id:'pre-1',from:{id:7001},invoice_payload:oid,currency:'XTR',total_amount:150}})).status,200);
+    assert.equal((await event({pre_checkout_query:{id:'pre-1',from:{id:7001,language_code:'ar'},invoice_payload:oid,currency:'XTR',total_amount:150}})).status,200);
     assert.equal(calls.find(x=>x.method==='answerPreCheckoutQuery').data.ok,true);
     const payment={invoice_payload:oid,currency:'XTR',total_amount:150,telegram_payment_charge_id:'charge-7001-test'};
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},successful_payment:payment}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},successful_payment:payment}})).status,200);
     const paidMessages=calls.filter(x=>x.method==='sendMessage' && x.data.text.includes('كود AIM8'));
     assert.ok(paidMessages.length>=1);
     const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
@@ -163,25 +163,34 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const reused=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(reused.ans.status,400);
     const refund={...payment};
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},refunded_payment:refund}})).status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
-    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},refunded_payment:refund}})).status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
     assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
+    // English Telegram users should receive English replies without selecting a language.
+    assert.equal((await event({message:{chat:{id:9009,type:'private'},from:{id:9009,language_code:'en-US'},text:'/start'}})).status,200);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Welcome to AIM8/);
+    const invoiceCount=calls.filter(x=>x.method==='sendInvoice').length;
+    await event({callback_query:{id:'locale-en-invoice',from:{id:7001,language_code:'en'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}});
+    assert.equal(calls.filter(x=>x.method==='sendInvoice').length,invoiceCount+1);
+    assert.match(calls.filter(x=>x.method==='sendInvoice').at(-1).data.title,/3 Months/);
+    assert.match(calls.filter(x=>x.method==='sendInvoice').at(-1).data.description,/subscription for 90 days/);
+
     // The linked bot must offer only the newly approved durations.
     db0.prepare("UPDATE plans SET stars_enabled=1 WHERE id IN ('half','year')").run();
-    await event({message:{chat:{id:7001,type:'private'},from:{id:7001},text:'/start'}});
+    await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}});
     const keyboard=calls.filter(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard).at(-1).data.reply_markup.inline_keyboard;
     assert.deepEqual(keyboard.map(x=>x[0].callback_data),['buy:quarter','buy:half','buy:year']);
     for(const [plan,amount] of [['half',250],['year',450]]){
       const beforeInvoices=calls.filter(x=>x.method==='sendInvoice').length;
-      assert.equal((await event({callback_query:{id:'buy-test-'+plan,from:{id:7001},message:{chat:{id:7001,type:'private'}},data:'buy:'+plan}})).status,200);
+      assert.equal((await event({callback_query:{id:'buy-test-'+plan,from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:'+plan}})).status,200);
       const invoices=calls.filter(x=>x.method==='sendInvoice');
       assert.equal(invoices.length,beforeInvoices+1);
       assert.equal(invoices.at(-1).data.prices[0].amount,amount);
     }
     const prior=calls.filter(x=>x.method==='sendInvoice').length;
-    await event({callback_query:{id:'buy-test-legacy',from:{id:7001},message:{chat:{id:7001,type:'private'}},data:'buy:week'}});
+    await event({callback_query:{id:'buy-test-legacy',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:week'}});
     assert.equal(calls.filter(x=>x.method==='sendInvoice').length,prior);
 
   }finally{globalThis.fetch=oldFetch;delete env.TELEGRAM_BOT_TOKEN}
