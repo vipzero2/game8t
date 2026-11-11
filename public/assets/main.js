@@ -187,9 +187,9 @@ async function adminTelegramOrdersInit(){
   root.replaceChildren();
   if(!data.orders.length){const tr=el('tr'),td=el('td','لا توجد مدفوعات تيليجرام بعد.');td.colSpan=6;tr.append(td);root.append(tr);return;}
   for(const order of data.orders){
-   const tr=el('tr');
+   const tableRow=el('tr');
    const values=[order.id.slice(0,17)+'…',order.email,names[order.plan_id]||order.plan_id,String(order.stars_amount)+' ⭐',order.status];
-   for(const value of values)addCell(tr,value);
+   for(const value of values)addCell(tableRow,value);
    const cell=el('td');
    if(['paid','redeemed'].includes(order.status)){
     const refund=el('button','استرجاع دفعة النجوم','btn small ghost');refund.type='button';
@@ -207,7 +207,7 @@ async function adminTelegramOrdersInit(){
      finally{setBusy(refund,false);}
     });cell.append(refund);
    }else cell.textContent=order.status==='refunded'?'تم الاسترجاع':'بانتظار الدفع';
-   tr.append(cell);root.append(tr);
+   tableRow.append(cell);root.append(tableRow);
   }
  }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);}
 }
