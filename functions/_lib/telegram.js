@@ -1,4 +1,5 @@
 import { ApiError, body, constantTime, currentUser, enc, fail, hmac, json, now, randomToken, requireAdmin, sha256, uid, base64url } from './common.js';
+import { entitlementEndSql } from './grants.js';
 
 const site = 'https://8aim.site';
 
@@ -80,18 +81,25 @@ export async function redeem(ctx) {
   if (!/^A8-[A-Za-z0-9_-]{28}$/.test(code)) fail('INVALID_CODE', 'صيغة الكود غير صحيحة');
   const hash = await sha256(code);
   const order = await ctx.env.DB.prepare('SELECT * FROM telegram_orders WHERE code_hash=?').bind(hash).first();
-  if (!order || order.user_id !== user.id) fail('INVALID_CODE', 'هذا الكود غير مخصص لحسابك أو غير موجود', 404);
+  if (!order || order.user_id !== user.id) fail('INVALID_CODE', 'الكود غير مخصص لهذا الحساب أو غير موجود', 404);
   if (order.status !== 'paid' || order.redeemed_at) fail('USED_OR_REFUNDED', 'الكود مستخدم أو الدفعة مسترجعة');
   if (!order.code_expires_at || order.code_expires_at <= now()) fail('CODE_EXPIRED', 'انتهت صلاحية الكود');
   const t = now(), nonce = uid();
-  const result = await ctx.env.DB.batch([
+  // D1.batch is transactional. Capture any pre-existing subscription once,
+  // consume exactly one code, create one grant, then recompute the expiry.
+  const results = await ctx.env.DB.batch([
+    ctx.env.DB.prepare('INSERT OR IGNORE INTO subscription_baselines(user_id,baseline_until,baseline_started_at,created_at) SELECT id,subscription_until,subscription_started_at,? FROM users WHERE id=?')
+      .bind(t, user.id),
     ctx.env.DB.prepare("UPDATE telegram_orders SET status='redeemed',redeemed_at=?,redeem_nonce=? WHERE id=? AND user_id=? AND status='paid' AND redeemed_at IS NULL AND code_expires_at>?")
       .bind(t, nonce, order.id, user.id, t),
-    ctx.env.DB.prepare("UPDATE users SET subscription_started_at=CASE WHEN subscription_until<? THEN ? ELSE COALESCE(subscription_started_at,?) END,subscription_until=MAX(subscription_until,?)+?*86400 WHERE id=? AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND redeem_nonce=? AND status='redeemed')")
-      .bind(t, t, t, t, order.duration_days, user.id, order.id, nonce)
+    ctx.env.DB.prepare("INSERT INTO subscription_grants(id,user_id,source,source_id,granted_at,duration_seconds) SELECT ?,user_id,'telegram',id,?,duration_days*86400 FROM telegram_orders WHERE id=? AND status='redeemed' AND redeem_nonce=?")
+      .bind(uid(), t, order.id, nonce),
+    ctx.env.DB.prepare('UPDATE users SET subscription_started_at=CASE WHEN subscription_until<? THEN ? ELSE COALESCE(subscription_started_at,?) END, subscription_until=' + entitlementEndSql +
+      " WHERE id=? AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND redeem_nonce=? AND status='redeemed')")
+      .bind(t, t, t, user.id, order.id, nonce)
   ]);
-  if (result[0]?.meta?.changes !== 1 || result[1]?.meta?.changes !== 1)
-    fail('REDEEM_FAILED', 'لم يتم تفعيل الكود؛ حدّث الصفحة وتأكد من حالته', 409);
+  if (results[1]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1 || results[3]?.meta?.changes !== 1)
+    fail('REDEEM_FAILED', 'الكود مستخدم؛ حدّث الصفحة ثم افحص الاشتراك', 409);
   const updated = await ctx.env.DB.prepare('SELECT subscription_until FROM users WHERE id=?').bind(user.id).first();
   return json({ ok: true, subscriptionUntil: updated.subscription_until, days: order.duration_days });
 }
@@ -135,12 +143,41 @@ async function onPreCheckout(env, q) {
   });
 }
 
+async function applyRefund(env, charge) {
+  const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE telegram_charge_id=?').bind(charge).first();
+  const event = await env.DB.prepare('SELECT * FROM telegram_refund_inbox WHERE telegram_charge_id=?').bind(charge).first();
+  if (!order || !event) return false;
+  if (order.telegram_user_id !== event.telegram_user_id ||
+      order.stars_amount !== event.stars_amount || event.currency !== 'XTR' ||
+      order.id !== event.payload) {
+    console.error('Telegram refund event does not match charge:', charge.slice(0, 12));
+    return false;
+  }
+  if (order.status === 'refunded') return true;
+  const t = now(), nonce = uid();
+  const result = await env.DB.batch([
+    env.DB.prepare("UPDATE telegram_orders SET status='refunded',refunded_at=?,refund_nonce=? WHERE id=? AND telegram_charge_id=? AND status IN ('paid','redeemed')")
+      .bind(t, nonce, order.id, charge),
+    env.DB.prepare("UPDATE subscription_grants SET revoked_at=? WHERE source='telegram' AND source_id=? AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded')")
+      .bind(t, order.id, order.id, nonce),
+    env.DB.prepare('UPDATE users SET subscription_until=' + entitlementEndSql +
+      " WHERE id=? AND EXISTS(SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND status='refunded' AND redeemed_at IS NOT NULL)")
+      .bind(order.user_id, order.id, nonce)
+  ]);
+  if (result[0]?.meta?.changes === 1) {
+    // Delivery errors should not undo the refund already recorded in D1.
+    try { await send(env, order.chat_id, 'تم تسجيل استرجاع دفعة النجوم. أُلغي كود الدفع وأُزيلت مدة هذه الدفعة فقط.'); }
+    catch (e) { console.error('Could not notify refunded user:', String(e)); }
+  }
+  return true;
+}
+
 async function onPaid(env, m, pay) {
   const tgId = fromId(m.from?.id), chat = fromId(m.chat?.id), id = String(pay.invoice_payload || '');
   const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(id).first();
   if (!order || order.telegram_user_id !== tgId || order.chat_id !== chat ||
-    pay.currency !== 'XTR' || pay.total_amount !== order.stars_amount ||
-    !pay.telegram_payment_charge_id) {
+      pay.currency !== 'XTR' || pay.total_amount !== order.stars_amount ||
+      !pay.telegram_payment_charge_id) {
     console.error('Unexpected Telegram payment for order:', id);
     throw new ApiError(409, 'PAYMENT_MISMATCH', 'Telegram payment mismatch');
   }
@@ -151,33 +188,24 @@ async function onPaid(env, m, pay) {
       .bind(now(), charge, hash, now() + 86400, order.id).run();
   }
   const current = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
-  if (current.telegram_charge_id !== charge || current.status === 'refunded')
-    return;
-  if (current.status === 'redeemed') return;
+  if (current.telegram_charge_id !== charge) throw new ApiError(409, 'CHARGE_MISMATCH', 'Charge ID mismatch');
+  // An out-of-order refund update must win over later delivery.
+  await applyRefund(env, charge);
+  const after = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
+  if (after.status === 'refunded' || after.status === 'redeemed') return;
+  if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
   await send(env, chat, 'تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n' + code +
-    '\n\nصالح حتى ' + new Date(current.code_expires_at * 1000).toISOString() +
+    '\n\nصالح حتى ' + new Date(after.code_expires_at * 1000).toISOString() +
     '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/dashboard.html');
 }
 
 async function onRefund(env, m, pay) {
   const tgId = fromId(m.from?.id), charge = String(pay.telegram_payment_charge_id || '');
-  if (!charge || pay.currency !== 'XTR') return;
-  const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE telegram_charge_id=?').bind(charge).first();
-  if (!order || order.telegram_user_id !== tgId || pay.total_amount !== order.stars_amount) {
-    console.error('Refund without matching tracked order:', charge.slice(0, 12));
-    return;
-  }
-  if (order.status === 'refunded') return;
-  const t = now(), nonce = uid();
-  const result = await env.DB.batch([
-    env.DB.prepare("UPDATE telegram_orders SET status='refunded',refunded_at=?,refund_nonce=? WHERE id=? AND telegram_charge_id=? AND status IN ('paid','redeemed')")
-      .bind(t, nonce, order.id, charge),
-    env.DB.prepare("UPDATE users SET subscription_until=MAX(?,subscription_until-?*86400) WHERE id=? AND EXISTS (SELECT 1 FROM telegram_orders WHERE id=? AND refund_nonce=? AND redeemed_at IS NOT NULL AND status='refunded')")
-      .bind(t, order.duration_days, order.user_id, order.id, nonce)
-  ]);
-  if (result[0]?.meta?.changes === 1) {
-    await send(env, order.chat_id, 'تم تسجيل استرجاع نجوم الدفعة. أُلغي كود التفعيل وسُحبت مدة هذه الدفعة من الاشتراك المرتبط بها.');
-  }
+  if (!charge || pay.currency !== 'XTR' || !Number.isSafeInteger(pay.total_amount) ||
+      typeof pay.invoice_payload !== 'string' || !pay.invoice_payload.startsWith('ts_')) return;
+  await env.DB.prepare('INSERT OR IGNORE INTO telegram_refund_inbox(telegram_charge_id,telegram_user_id,currency,stars_amount,payload,received_at) VALUES(?,?,?,?,?,?)')
+    .bind(charge, tgId, 'XTR', pay.total_amount, pay.invoice_payload, now()).run();
+  await applyRefund(env, charge);
 }
 
 async function onMessage(env, m) {
