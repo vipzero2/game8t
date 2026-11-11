@@ -8,6 +8,7 @@ import * as emailSecurity from '../_lib/email-security.js';
 import * as telegram from '../_lib/telegram.js';
 const endpoints={
  'GET /config':payment.plans,
+ 'GET /telegram/open':telegram.openBot,
  'POST /telegram/link':telegram.startLink,
  'POST /telegram/redeem':telegram.redeem,
  'POST /telegram/webhook':telegram.webhook,
