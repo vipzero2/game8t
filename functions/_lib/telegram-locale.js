@@ -28,6 +28,7 @@ const dictionary=new Map([
   ['استخدم الرابط الآمن','Use the secure link'],
   ['حدد سعراً صحيحاً بالنجوم','Enter a valid Stars price'],
   ['الباقة غير موجودة','Plan not found'],
+  ['انسخ رمز ربط تيليجرام من موقع AIM8 وأرسله هنا برسالة واحدة.','Copy the Telegram pairing code from AIM8 and send it here as one message.'],
   ['3 أشهر','3 Months'],
   ['6 أشهر','6 Months'],
   ['سنة كاملة','1 Year']
@@ -37,7 +38,7 @@ const phrases=[
   ['\n\nصالح حتى ','\n\nValid until '],
   ['\nاستخدمه مرة واحدة في صفحة حسابك على ','\nRedeem it once on your dashboard at '],
   ['أهلاً بك في AIM8. سجّل دخولك في ','Welcome to AIM8. Sign in at '],
-  [' ثم اضغط الحصول على كود التفعيل لربط حسابك.',' and tap Get Activation Code to link your account.'],
+  [' ثم اضغط الحصول على كود التفعيل، وبعدها انسخ رمز ربط تيليجرام من الموقع وأرسله هنا.',' then tap Get Activation Code. Copy the Telegram pairing code from the site and send it here.'],
   ['افتح حسابك في ','Open your account at '],
   [' ثم اضغط الحصول على كود التفعيل لربط الحساب.',' and tap Get Activation Code to link the account.'],
   ['اشتراك AIM8 لمدة ','AIM8 subscription for '],
