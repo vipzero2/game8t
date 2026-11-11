@@ -25,9 +25,35 @@ async function loadPlans(){return null;}
 // Pre-create the short-lived, account-bound bot link. Once ready, the button
 // is a native <a href="https://t.me/..."> so app opening keeps user activation.
 // No plan is chosen on the site; the picker and invoice stay inside Telegram.
-const botLaunch={url:null,validUntil:0,inflight:null};
+const botLaunch={url:null,linkCode:null,validUntil:0,inflight:null};
 const botLoginUrl='auth.html?next=dashboard.html';
 const botFallbackId=btn=>btn.id==='botActivateHome'?'botLinkBackupHome':'botLinkBackupDash';
+const botPairId=btn=>btn.id==='botActivateHome'?'botPairingHome':'botPairingDash';
+const botPairInputId=btn=>btn.id==='botActivateHome'?'botPairCodeHome':'botPairCodeDash';
+function showPairingCode(linkCode){
+ for(const id of ['botActivateHome','starsStart']){
+  const button=$(id);if(!button)continue;
+  const wrap=$(botPairId(button)),input=$(botPairInputId(button));
+  if(wrap&&input){input.value=linkCode;wrap.hidden=false;}
+ }
+}
+function bindPairCopy(button){
+ if(!button)return;
+ const id=button.id==='botActivateHome'?'botCopyHome':'botCopyDash';
+ $(id)?.addEventListener('click',async()=>{
+  const input=$(botPairInputId(button));if(!input?.value)return;
+  try{
+   if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');
+   await navigator.clipboard.writeText(input.value);
+   const status=$(button.id==='botActivateHome'?'botLaunchStatusHome':'starsResult');
+   if(status)status.textContent='تم نسخ رمز الربط. افتح البوت والصقه برسالة.';
+  }catch{
+   input.focus();input.select();
+   const status=$(button.id==='botActivateHome'?'botLaunchStatusHome':'starsResult');
+   if(status)status.textContent='حدد الرمز ثم انسخه وأرسله داخل البوت.';
+  }
+ });
+}
 function botLinkReady(){return !!botLaunch.url&&Date.now()<botLaunch.validUntil-30000;}
 function showBotDirectLink(button,url){
  const backup=$(botFallbackId(button));
@@ -48,7 +74,9 @@ async function prepareActivationBot(){
      throw Error('رابط تيليجرام غير صالح');
    const lifetime=Math.min(600,Math.max(60,Number(data.expiresIn)||600));
    botLaunch.url=url.href;
+   botLaunch.linkCode=String(data.linkCode||'');
    botLaunch.validUntil=Date.now()+lifetime*1000;
+   if(/^[A-Za-z0-9_-]{12,64}$/.test(botLaunch.linkCode))showPairingCode(botLaunch.linkCode);
    setBotButtonUrl($('botActivateHome'),url.href);
    setBotButtonUrl($('starsStart'),url.href);
    return url.href;
@@ -71,7 +99,9 @@ function attachActivationButton(button,errorNode){
  if(!button)return;
  // Background preparation makes the ordinary hyperlink work on the first click.
  prepareActivationBot().catch(err=>{
-   if(err.status===401)setBotButtonUrl(button,botLoginUrl);
+   if(err.status===401){setBotButtonUrl(button,botLoginUrl);return;}
+   const status=$(button.id==='botActivateHome'?'botLaunchStatusHome':'starsResult');
+   if(status)status.textContent=err.message;
  });
  button.addEventListener('click',event=>{
    if(botLinkReady()&&button.tagName==='A')return; // Native direct click; no async redirect.
@@ -80,10 +110,10 @@ function attachActivationButton(button,errorNode){
    openActivationBot(button,errorNode);
  });
 }
-async function homeInit(){attachActivationButton($('botActivateHome'),null);}
+async function homeInit(){attachActivationButton($('botActivateHome'),null);bindPairCopy($('botActivateHome'));}
 window.addEventListener('pageshow',event=>{
  if(!event.persisted)return;
- botLaunch.url=null;botLaunch.validUntil=0;
+ botLaunch.url=null;botLaunch.linkCode=null;botLaunch.validUntil=0;
  const button=$('botActivateHome')||$('starsStart');
  if(button)prepareActivationBot().catch(()=>{});
 });
@@ -101,6 +131,7 @@ async function starsInit(){
  const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
  if(!start||!redeem)return;
  attachActivationButton(start,result);
+ bindPairCopy(start);
  redeem.addEventListener('click',async()=>{
    const code=$('starsCode').value.trim();
    if(!code){result.textContent='أدخل الكود أولاً';return;}
