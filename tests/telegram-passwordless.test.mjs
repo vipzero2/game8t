@@ -52,7 +52,8 @@ test('Telegram account, paid code, one device, free phone transfer and revoked o
   assert.equal((await x.bot({callback_query:{id:'first-lang-ar',from:{id:tgId,language_code:'en'},message:{chat:{id:tgId,type:'private'}},data:'lang:ar'}})).status,200);
   const picker=x.calls.filter(c=>c.method==='sendMessage').at(-1).data.reply_markup.inline_keyboard;
   assert.equal(picker[0][0].callback_data,'buy:quarter');
-  assert.equal(picker.at(-1)[0].callback_data,'recover:ask');
+  assert.equal(picker.at(-2)[0].callback_data,'recover:ask');
+  assert.equal(picker.at(-1)[0].callback_data,'lang:menu');
   assert.equal((await x.bot({callback_query:{id:'buy-1',from:{id:tgId},message:{chat:{id:tgId,type:'private'}},data:'buy:quarter'}})).status,200);
   const orderId=x.calls.find(c=>c.method==='sendInvoice').data.payload;
   assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:{id:tgId,language_code:'ar'},successful_payment:{invoice_payload:orderId,currency:'XTR',total_amount:150,telegram_payment_charge_id:'paid-charge-test'}}})).status,200);
@@ -106,7 +107,7 @@ test('Free recovery cannot be claimed without any paid entitlement or forged Tel
   await x.bot({message:{chat:{id:8001234,type:'private'},from:{id:8001234,language_code:'ar'},text:'/start'}});
   await x.bot({callback_query:{id:'no-purchase-lang',from:{id:8001234,language_code:'ar'},message:{chat:{id:8001234,type:'private'}},data:'lang:ar'}});
   assert.equal((await x.bot({callback_query:{id:'recover-no-purchase',from:{id:8001234,language_code:'ar'},message:{chat:{id:8001234,type:'private'}},data:'recover:confirm'}})).status,200);
-  assert.match(x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,/ما عندك اشتراك/);
+  assert.match(x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,/لا يوجد اشتراك/);
   const fake=await x.api('/telegram/device/challenge',{telegramId:'8001234'});
   assert.equal(fake.status,200);
   const p=x.phone(),attempt=await x.api('/telegram/device/activate',{code:'A8-'+'a'.repeat(28),publicKey:p.publicKey,challengeId:fake.data.challengeId,signature:p.sign('AIM8:telegram:activate:'+fake.data.challengeId+':'+fake.data.nonce)});
