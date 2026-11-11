@@ -6,6 +6,7 @@ import * as admin from '../_lib/admin.js';
 import * as support from '../_lib/support.js';
 import * as emailSecurity from '../_lib/email-security.js';
 import * as telegram from '../_lib/telegram.js';
+import * as telegramLicense from '../_lib/telegram-license.js';
 import * as starsMonitor from '../_lib/stars-monitor.js';
 import {authorizedScheduledRun} from '../_lib/scheduler-identity.js';
 const endpoints={
@@ -13,6 +14,9 @@ const endpoints={
  'GET /telegram/open':telegram.openBot,
  'POST /telegram/link':telegram.startLink,
  'POST /telegram/redeem':telegram.redeem,
+ 'POST /telegram/device/challenge':telegramLicense.challenge,
+ 'POST /telegram/device/activate':telegramLicense.activate,
+ 'POST /telegram/device/verify':telegramLicense.verify,
  'POST /telegram/webhook':telegram.webhook,
  'POST /admin/telegram/configure':telegram.configureWebhook,
  'POST /admin/telegram/plan':telegram.setStarsPlan,
