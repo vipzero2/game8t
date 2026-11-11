@@ -34,7 +34,7 @@ function sameSecret(received, expected) {
 }
 function fromId(v) { return String(v || ''); }
 function goodPlan(p) {
-  return p && p.stars_enabled === 1 && Number.isSafeInteger(p.stars_price) && p.stars_price > 0;
+  return p && ['quarter', 'half', 'year'].includes(p.id) && p.stars_enabled === 1 && Number.isSafeInteger(p.stars_price) && p.stars_price > 0;
 }
 async function sendInvoice(env, chatId, telegramId, planId) {
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(telegramId).first();
@@ -109,7 +109,7 @@ async function onStart(env, message, token) {
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
     if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.');
-    const plans = (await env.DB.prepare('SELECT id,name,days,stars_price FROM plans WHERE stars_enabled=1 AND stars_price>0 ORDER BY days').all()).results;
+    const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
     if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.');
     return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
       inline_keyboard: plans.map(p => [{ text: p.name + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
@@ -221,7 +221,7 @@ async function onMessage(env, m) {
 
 async function onCallback(env, q) {
   if (q.message?.chat?.type !== 'private' || !q.from) return;
-  const cb = String(q.data || '').match(/^buy:(week|month|quarter)$/);
+  const cb = String(q.data || '').match(/^buy:(quarter|half|year)$/);
   if (!cb) return telegram(env, 'answerCallbackQuery', { callback_query_id: q.id, text: 'خيار غير متاح' });
   const seen = await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
     .bind(q.id, now()).run();
@@ -268,7 +268,7 @@ export async function setStarsPlan(ctx) {
   const d = await body(ctx.request);
   const id = String(d.id || '');
   const amount = Number(d.starsPrice), enabled = d.enabled === true ? 1 : 0;
-  if (!/^(week|month|quarter)$/.test(id) || !Number.isSafeInteger(amount) ||
+  if (!/^(quarter|half|year)$/.test(id) || !Number.isSafeInteger(amount) ||
     amount < 0 || amount > 100000 || (enabled && amount < 1))
     fail('INVALID_STARS_PRICE', 'حدد سعراً صحيحاً بالنجوم');
   const result = await ctx.env.DB.prepare('UPDATE plans SET stars_price=?, stars_enabled=? WHERE id=?')
