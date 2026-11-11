@@ -118,7 +118,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
   const logged=await send('POST','/auth/login',{email:'customer@gmail.com',password:'another strong password example'});
   assert.equal(logged.ans.status,200);
   const userCookie=logged.ans.headers.get('set-cookie').split(';')[0];
-  const target=db0.prepare("SELECT id,subscription_until FROM users WHERE email='customer@gmail.com'").get();
+  const target=db0.prepare("SELECT id,subscription_until,device_public_key FROM users WHERE email='customer@gmail.com'").get();
   const before=target.subscription_until;
   env.TELEGRAM_BOT_TOKEN='test-only-token';
   db0.prepare("UPDATE plans SET stars_enabled=1 WHERE id='quarter'").run();
@@ -193,6 +193,31 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+90*86400);assert.equal(db0.prepare("SELECT COUNT(*) c FROM subscription_grants WHERE user_id=? AND source='oxapay'").get(target.id).c,1);
     const reused=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(reused.ans.status,400);
+    // A refund request must NOT cancel access until Telegram confirms a refund.
+    const notAdmin=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Refund test'},userCookie);
+    assert.equal(notAdmin.ans.status,403);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+90*86400);
+    const adminLogin=await send('POST','/auth/login',{email:'tester@gmail.com',password:'new-password-strong-2026'});
+    assert.equal(adminLogin.ans.status,200);
+    const freshAdminCookie=adminLogin.ans.headers.get('set-cookie').split(';')[0];
+    const adminList=await send('GET','/admin/telegram/orders',{},freshAdminCookie);
+    assert.equal(adminList.ans.status,200);
+    assert.ok(adminList.data.orders.some(o=>o.id===oid && o.status==='redeemed'));
+    // Official Telegram refund immediately cancels only this order; the
+    // refund service message may arrive later, so DB must already be updated.
+    const officialRefund=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Customer refund test'},freshAdminCookie);
+    assert.equal(officialRefund.ans.status,200);
+    assert.equal(officialRefund.data.starsRefunded,150);
+    assert.equal(officialRefund.data.subscriptionRevoked,true);
+    assert.deepEqual(calls.filter(x=>x.method==='refundStarPayment').at(-1).data,
+      {user_id:7001,telegram_payment_charge_id:'charge-7001-test'});
+    assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
+    assert.equal(db0.prepare('SELECT revoked_at IS NOT NULL AS revoked FROM subscription_grants WHERE source=? AND source_id=?').get('telegram',oid).revoked,1);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    const repeat=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Already refunded'},freshAdminCookie);
+    assert.equal(repeat.ans.status,200);
+    assert.equal(repeat.data.alreadyRefunded,true);
+    assert.equal(calls.filter(x=>x.method==='refundStarPayment').length,1);
     const refund={...payment};
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},refunded_payment:refund}})).status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
@@ -225,4 +250,19 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(calls.filter(x=>x.method==='sendInvoice').length,prior);
 
   }finally{globalThis.fetch=oldFetch;delete env.TELEGRAM_BOT_TOKEN}
+});
+
+test('revoked or expired subscription is denied at server-side device verification',async()=>{
+  const record=db0.prepare("SELECT id,subscription_until,device_public_key FROM users WHERE email='customer@gmail.com'").get();
+  assert.ok(record);
+  db0.prepare("UPDATE users SET subscription_until=0,device_public_key='mock-device' WHERE id=?").run(record.id);
+  try{
+    // Must reject an inactive subscription before attempting signature proof or
+    // consuming a device challenge, even if the client ignores a boolean flag.
+    const r=await send('POST','/device/verify',{email:'customer@gmail.com',challengeId:'unissued',signature:'invalid'});
+    assert.equal(r.ans.status,403);
+    assert.equal(r.data.error,'SUBSCRIPTION_REQUIRED');
+  }finally{
+    db0.prepare('UPDATE users SET subscription_until=?,device_public_key=? WHERE id=?').run(record.subscription_until,record.device_public_key,record.id);
+  }
 });

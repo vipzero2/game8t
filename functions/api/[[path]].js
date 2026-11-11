@@ -14,6 +14,8 @@ const endpoints={
  'POST /telegram/webhook':telegram.webhook,
  'POST /admin/telegram/configure':telegram.configureWebhook,
  'POST /admin/telegram/plan':telegram.setStarsPlan,
+ 'GET /admin/telegram/orders':telegram.listTelegramOrders,
+ 'POST /admin/telegram/refund':telegram.adminRefund,
  'GET /auth/me':auth.me,
  'POST /auth/register':emailSecurity.startSignup,
  'POST /auth/signup/verify':emailSecurity.verifySignup,
