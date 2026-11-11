@@ -7,7 +7,7 @@ import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.
 import {PasswordHasher} from '../auth-hasher/src/index.js';
 const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/002_email_security.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/003_telegram_stars.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/004_subscription_grants.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
-const DB={prepare(sql){return statement(sql)}};
+const DB={prepare(sql){return statement(sql)},async batch(items){db0.exec('BEGIN');try{const result=[];for(const item of items)result.push(await item.run());db0.exec('COMMIT');return result}catch(e){db0.exec('ROLLBACK');throw e}}};
 let latestEmailCode='';
 const realFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{if(String(url)==='https://api.resend.com/emails'){const email=JSON.parse(options.body);latestEmailCode=email.text.match(/\b\d{6}\b/)?.[0]||'';return Response.json({id:'test-mail-id'})}return realFetch(url,options)};
@@ -111,4 +111,62 @@ test('Gmail verified owner may release device without changing subscription',asy
  assert.equal(after.data.user.subscriptionUntil,until);
  const cannotVerifyOld=await send('POST','/device/verify',{email:'customer@gmail.com',challengeId:'anything',signature:'not-real'});
  assert.equal(cannotVerifyOld.ans.status,403);
+});
+
+
+test('Telegram Stars requires a linked account, credits one redemption, and revokes only refunded payment',async()=>{
+  const logged=await send('POST','/auth/login',{email:'customer@gmail.com',password:'another strong password example'});
+  assert.equal(logged.ans.status,200);
+  const userCookie=logged.ans.headers.get('set-cookie').split(';')[0];
+  const target=db0.prepare("SELECT id,subscription_until FROM users WHERE email='customer@gmail.com'").get();
+  const before=target.subscription_until;
+  env.TELEGRAM_BOT_TOKEN='test-only-token';
+  db0.prepare("UPDATE plans SET stars_price=5,stars_enabled=1 WHERE id='week'").run();
+  const calls=[];
+  const oldFetch=globalThis.fetch;
+  globalThis.fetch=async (url,options)=>{
+    if(String(url).startsWith('https://api.telegram.org/bot')){
+      const method=String(url).split('/').pop(),data=JSON.parse(options.body||'{}');
+      calls.push({method,data});
+      if(method==='getMe')return Response.json({ok:true,result:{username:'AIM8_test_bot'}});
+      return Response.json({ok:true,result:true});
+    }
+    return oldFetch(url,options);
+  };
+  try {
+    const begin=await send('POST','/telegram/link',{planId:'week'},userCookie);
+    assert.equal(begin.ans.status,200);
+    const token=new URL(begin.data.url).searchParams.get('start');
+    const secret=base64url(await hmac(env.SESSION_SECRET,'aim8:telegram:webhook:v1'));
+    const event=async(update)=>{
+      const req=new Request('https://aim8.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json','X-Telegram-Bot-Api-Secret-Token':secret},body:JSON.stringify(update)});
+      return onRequest({request:req,env,params:{path:['telegram','webhook']}});
+    };
+    const rejected=await onRequest({request:new Request('https://aim8.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
+    assert.equal(rejected.status,401);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},text:'/start '+token}})).status,200);
+    const invoice=calls.find(x=>x.method==='sendInvoice');
+    assert.ok(invoice,'Telegram invoice should be sent');
+    assert.equal(invoice.data.currency,'XTR');
+    const oid=invoice.data.payload;
+    assert.equal((await event({pre_checkout_query:{id:'pre-1',from:{id:7001},invoice_payload:oid,currency:'XTR',total_amount:5}})).status,200);
+    assert.equal(calls.find(x=>x.method==='answerPreCheckoutQuery').data.ok,true);
+    const payment={invoice_payload:oid,currency:'XTR',total_amount:5,telegram_payment_charge_id:'charge-7001-test'};
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
+    const paidMessages=calls.filter(x=>x.method==='sendMessage' && x.data.text.includes('كود AIM8'));
+    assert.ok(paidMessages.length>=1);
+    const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
+    const credited=await send('POST','/telegram/redeem',{code},userCookie);
+    assert.equal(credited.ans.status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+7*86400);
+    const reused=await send('POST','/telegram/redeem',{code},userCookie);
+    assert.equal(reused.ans.status,400);
+    const refund={...payment};
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
+  }finally{globalThis.fetch=oldFetch;delete env.TELEGRAM_BOT_TOKEN}
 });
