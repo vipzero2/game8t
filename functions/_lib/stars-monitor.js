@@ -40,7 +40,7 @@ async function lease(db,t){
  ).bind(LEASE,t+240,t).run();
  return r.meta?.changes===1;
 }
-async function release(db){await db.prepare('UPDATE rate_limits SET reset_at=? WHERE key=?').bind(now(),LEASE).run();}
+async function release(db){await db.prepare('UPDATE rate_limits SET reset_at=? WHERE key=?').bind(0,LEASE).run();}
 
 export async function reconcileStars(env){
  if(!env?.DB||!env.TELEGRAM_BOT_TOKEN)throw Error('Missing D1 or Telegram bot configuration');
