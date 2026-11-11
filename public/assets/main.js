@@ -46,7 +46,7 @@ async function starsInit(){
    const data=await post('/telegram/link',{planId:planSelect.value});
    const url=new URL(data.url);
    if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
-   window.open(url.href,'_blank','noopener,noreferrer');
+   location.assign(url.href);
    result.textContent='افتح بوت تيليجرام ثم اضغط Start لإظهار فاتورة النجوم.';
  }catch(e){result.textContent=e.message;}finally{setBusy(start,false);render();}});
  redeem.addEventListener('click',async()=>{const code=$('starsCode').value.trim();if(!code){result.textContent='أدخل الكود أولاً';return;}
