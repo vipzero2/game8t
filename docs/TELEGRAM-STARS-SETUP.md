@@ -33,10 +33,26 @@ Use your configured D1 database name if different; do **not** run `schema.sql` a
 
 ## Important limitations and launch checks
 - Keep `PAYMENTS_ENABLED=false` if OxaPay is retired; Telegram pricing uses `stars_enabled` separately.
-- This version uses expiry arithmetic for refunds rather than independent time-bounded grants. **Before taking live payments, validate mixed purchases and historical subscriptions**. In particular, a refund long after original activation may require a grant-ledger adjustment to avoid unintended loss of unrelated entitlements.
+- Refunds are recorded per order and remove the specific grant from the chronological `subscription_grants` ledger; migration 004 must be applied before enabling payment.
 - Existing site pages, checkout and legal copy still mention OxaPay; update them before marketing a Stars-only checkout.
 - Automatic email notifications, reconciliation of missed refund events, and a dashboard ledger of Stars orders are not implemented.
 - Bot token rotation, secure server configuration and periodic payment-event reconciliation should be part of operational procedures.
 - For refund disputes, the bot supports `/paysupport` pointing to the site's support system.
 
 References: https://core.telegram.org/bots/payments-stars and https://core.telegram.org/bots/api
+
+## New AIM8 plans — November 2026
+
+The only customer-facing Telegram Stars packages are:
+
+| ID | Arabic label | Duration | Stars | Advertised approximate USD |
+|---|---|---:|---:|---:|
+| quarter | 3 أشهر | 90 days | 150 ⭐ | ~$3 |
+| half | 6 أشهر | 180 days | 250 ⭐ | ~$5 |
+| year | سنة كاملة | 365 days | 450 ⭐ | ~$9 |
+
+Actual buyer costs in USD depend on their Telegram Stars purchase method, region and fees. These are the agreed in-app Stars amounts, not guaranteed USD payment values or payouts.
+
+**Production migration** after 003 and 004: run `db/005_stars_plans_90_180_365.sql` *once* on the production `aim8-db` before enabling sales. It keeps historic `week` and `month` plan rows for order history, but disables them and removes them from the public sale catalog. All 3 new plans are deliberately left with `stars_enabled=0` until an administrator tests the webhook and enables each package. Reapplying the migration turns those 3 plans off again; don't reapply after going live.
+
+Refunds use the `subscription_grants` ledger from migration 004, revoking only the refunded Telegram grant; existing manual and OxaPay grants remain. Check the current docs and source, rather than old references to subtracting a flat duration from `subscription_until`.
