@@ -193,6 +193,28 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+90*86400);assert.equal(db0.prepare("SELECT COUNT(*) c FROM subscription_grants WHERE user_id=? AND source='oxapay'").get(target.id).c,1);
     const reused=await send('POST','/telegram/redeem',{code},userCookie);
     assert.equal(reused.ans.status,400);
+    // A refund request must NOT cancel access until Telegram confirms a refund.
+    const notAdmin=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Refund test'},userCookie);
+    assert.equal(notAdmin.ans.status,403);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+90*86400);
+    const adminList=await send('GET','/admin/telegram/orders',{},cookie);
+    assert.equal(adminList.ans.status,200);
+    assert.ok(adminList.data.orders.some(o=>o.id===oid && o.status==='redeemed'));
+    // Official Telegram refund immediately cancels only this order; the
+    // refund service message may arrive later, so DB must already be updated.
+    const officialRefund=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Customer refund test'},cookie);
+    assert.equal(officialRefund.ans.status,200);
+    assert.equal(officialRefund.data.starsRefunded,150);
+    assert.equal(officialRefund.data.subscriptionRevoked,true);
+    assert.deepEqual(calls.filter(x=>x.method==='refundStarPayment').at(-1).data,
+      {user_id:7001,telegram_payment_charge_id:'charge-7001-test'});
+    assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
+    assert.equal(db0.prepare('SELECT revoked_at IS NOT NULL AS revoked FROM subscription_grants WHERE source=? AND source_id=?').get('telegram',oid).revoked,1);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    const repeat=await send('POST','/admin/telegram/refund',{orderId:oid,reason:'Already refunded'},cookie);
+    assert.equal(repeat.ans.status,200);
+    assert.equal(repeat.data.alreadyRefunded,true);
+    assert.equal(calls.filter(x=>x.method==='refundStarPayment').length,1);
     const refund={...payment};
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},refunded_payment:refund}})).status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
