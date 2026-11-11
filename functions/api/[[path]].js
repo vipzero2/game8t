@@ -6,6 +6,8 @@ import * as admin from '../_lib/admin.js';
 import * as support from '../_lib/support.js';
 import * as emailSecurity from '../_lib/email-security.js';
 import * as telegram from '../_lib/telegram.js';
+import * as starsMonitor from '../_lib/stars-monitor.js';
+import {authorizedScheduledRun} from '../_lib/scheduler-identity.js';
 const endpoints={
  'GET /config':payment.plans,
  'GET /telegram/open':telegram.openBot,
@@ -16,6 +18,13 @@ const endpoints={
  'POST /admin/telegram/plan':telegram.setStarsPlan,
  'GET /admin/telegram/orders':telegram.listTelegramOrders,
  'POST /admin/telegram/refund':telegram.adminRefund,
+ 'GET /admin/telegram/reconcile/status':starsMonitor.monitorStatus,
+ 'POST /admin/telegram/reconcile':starsMonitor.adminScan,
+ 'POST /telegram/reconcile':async ctx=>{
+   if(!await authorizedScheduledRun(ctx.request))
+     return json({ok:false,error:'UNAUTHORIZED',message:'Unauthorized scheduler'},401);
+   return json(await starsMonitor.reconcileStars(ctx.env));
+ },
  'GET /auth/me':auth.me,
  'POST /auth/register':emailSecurity.startSignup,
  'POST /auth/signup/verify':emailSecurity.verifySignup,

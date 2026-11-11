@@ -211,6 +211,34 @@ function renderStarsAdmin(plans){
  $('adminTelegramStatus').textContent='تم تسجيل Webhook على: '+data.webhookUrl;
  }catch(e){$('adminTelegramStatus').textContent=e.message;}finally{setBusy(btn,false)}});
 }
+async function adminStarsMonitorInit(){
+ const output=$('starsMonitorStatus');if(!output)return;
+ try{
+  const data=await api('/admin/telegram/reconcile/status');
+  const last=data.lastSync?fmtTime(data.lastSync)+' — '+new Date(data.lastSync*1000).toLocaleTimeString(userLang==='ar'?'ar-IQ':'en-US'):'لم يُنفّذ فحص بعد';
+  const parts=['آخر فحص ناجح: '+last,
+   'رصيد نجوم البوت: '+(data.balance===null?'غير متوفر':data.balance+' ⭐'),
+   'عمليات غير معرّفة تحتاج مراجعة: '+data.unmatchedAlerts,
+   'آخر فحص ألغى '+data.lastRevocations+' اشتراكات مسترجعة'];
+  if(data.lastError)parts.push('تنبيه: آخر فحص فشل');
+  if(data.truncated)parts.push('تنبيه: عدد المعاملات أكبر من نطاق الفحص الأخير');
+  output.textContent=parts.join(' | ');
+ }catch(err){output.textContent='تعذّر تحميل سجل الحماية: '+err.message;}
+}
+function attachStarsMonitorControls(){
+ $('adminRefreshStarsMonitor')?.addEventListener('click',adminStarsMonitorInit);
+ $('adminRunStarsScan')?.addEventListener('click',async()=>{
+  const button=$('adminRunStarsScan');setBusy(button,true,'جارٍ فحص معاملات تيليجرام...');
+  try{
+   const r=await post('/admin/telegram/reconcile',{});
+   const status=$('starsMonitorStatus');
+   status.textContent=r.skipped?'يوجد فحص آخر يعمل الآن.':'اكتمل الفحص: '+r.scanned+' معاملة، '+r.revoked+' اشتراكات ملغاة، '+r.unmatched+' حركات غير معرّفة. (الحركات غير المعرّفة لا تلغي المستخدمين تلقائياً.)';
+   await adminTelegramOrdersInit();
+   await adminStarsMonitorInit();
+  }catch(e){$('starsMonitorStatus').textContent='تعذّر الفحص: '+e.message;}
+  finally{setBusy(button,false);}
+ });
+}
 async function adminTelegramOrdersInit(){
  const root=$('adminTelegramOrders');if(!root)return;
  try{
@@ -243,7 +271,7 @@ async function adminTelegramOrdersInit(){
   }
  }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='تعذّر تحميل مدفوعات تيليجرام';}
 }
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();attachStarsMonitorControls();const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}

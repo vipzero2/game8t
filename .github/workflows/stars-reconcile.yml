@@ -1,0 +1,48 @@
+name: AIM8 Telegram Stars chargeback protection
+on:
+  schedule:
+    # Offset from top of the hour to reduce GitHub scheduler congestion.
+    - cron: "2-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aim8-stars-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify Telegram Stars refunds with signed GitHub identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "GitHub OIDC token endpoint is unavailable"
+            exit 1
+          fi
+          identity_json="$(curl --silent --show-error --fail --retry 2 --max-time 20 \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2F8aim.site%2Fapi%2Ftelegram%2Freconcile")"
+          identity="$(printf '%s' "$identity_json" | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')"
+          if [[ -z "$identity" ]]; then echo "Missing OIDC identity"; exit 1; fi
+          # Never echo the token. Cloudflare verifies RS256, issuer, audience,
+          # repository ID, workflow path, main branch and schedule event.
+          result="$(curl --silent --show-error --fail-with-body --retry 2 --max-time 120 \
+            -X POST "https://8aim.site/api/telegram/reconcile" \
+            -H "Authorization: Bearer $identity" \
+            -H "Content-Type: application/json" \
+            --data '{}')"
+          printf '%s\n' "$result" | python3 -c '
+          import sys,json
+          r=json.load(sys.stdin)
+          if not r.get("ok"): raise SystemExit("Stars reconciliation failed")
+          print("Scanned:",r.get("scanned"),"Refunds revoked:",r.get("revoked"),
+                "Unknown movements:",r.get("unmatched"),"Truncated:",r.get("truncated"),
+                "Skipped:",r.get("skipped",False))
+          '
