@@ -201,7 +201,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
     // English Telegram users should receive English replies without selecting a language.
     assert.equal((await event({message:{chat:{id:9009,type:'private'},from:{id:9009,language_code:'en-US'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Welcome to AIM8/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Choose one of the three plans/);
     const invoiceCount=calls.filter(x=>x.method==='sendInvoice').length;
     await event({callback_query:{id:'locale-en-invoice',from:{id:7001,language_code:'en'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}});
     assert.equal(calls.filter(x=>x.method==='sendInvoice').length,invoiceCount+1);
