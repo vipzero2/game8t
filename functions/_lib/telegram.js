@@ -52,7 +52,7 @@ async function sendInvoice(env, chatId, telegramId, planId) {
   await telegram(env, 'sendInvoice', {
     chat_id: chatId, title: 'AIM8 - ' + plan.name,
     description: 'اشتراك AIM8 لمدة ' + plan.days + ' يوم. يصدر كود صالح 24 ساعة بعد الدفع.',
-    payload: orderId, provider_token: '', currency: 'XTR',
+    payload: orderId, currency: 'XTR',
     prices: [{ label: plan.name, amount: plan.stars_price }],
     start_parameter: 'aim8-payment'
   });
