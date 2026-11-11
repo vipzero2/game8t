@@ -5,8 +5,14 @@ import * as payment from '../_lib/payments.js';
 import * as admin from '../_lib/admin.js';
 import * as support from '../_lib/support.js';
 import * as emailSecurity from '../_lib/email-security.js';
+import * as telegram from '../_lib/telegram.js';
 const endpoints={
  'GET /config':payment.plans,
+ 'POST /telegram/link':telegram.startLink,
+ 'POST /telegram/redeem':telegram.redeem,
+ 'POST /telegram/webhook':telegram.webhook,
+ 'POST /admin/telegram/configure':telegram.configureWebhook,
+ 'POST /admin/telegram/plan':telegram.setStarsPlan,
  'GET /auth/me':auth.me,
  'POST /auth/register':emailSecurity.startSignup,
  'POST /auth/signup/verify':emailSecurity.verifySignup,
@@ -35,4 +41,4 @@ const endpoints={
  'POST /admin/plan':admin.setPlan,
  'POST /admin/block':admin.block
 };
-export async function onRequest(ctx){try{assertDb(ctx.env);const url=new URL(ctx.request.url);const path='/'+(Array.isArray(ctx.params.path)?ctx.params.path.join('/'):(ctx.params.path||''));if(ctx.request.method!=='GET'&&path!=='/payments/webhook')siteOrigin(ctx.request);const fn=endpoints[ctx.request.method+' '+path];if(!fn)return json({ok:false,error:'NOT_FOUND',message:'المسار غير موجود'},404);return await fn(ctx);}catch(e){if(e instanceof ApiError)return json({ok:false,error:e.code,message:e.message},e.status);console.error('AIM8 API failed:',e?.message||e);return json({ok:false,error:'SERVER_ERROR',message:'حصل خطأ داخلي؛ تحقق من إعدادات السيرفر'},500)}}
+export async function onRequest(ctx){try{assertDb(ctx.env);const url=new URL(ctx.request.url);const path='/'+(Array.isArray(ctx.params.path)?ctx.params.path.join('/'):(ctx.params.path||''));if(ctx.request.method!=='GET'&&path!=='/payments/webhook'&&path!=='/telegram/webhook')siteOrigin(ctx.request);const fn=endpoints[ctx.request.method+' '+path];if(!fn)return json({ok:false,error:'NOT_FOUND',message:'المسار غير موجود'},404);return await fn(ctx);}catch(e){if(e instanceof ApiError)return json({ok:false,error:e.code,message:e.message},e.status);console.error('AIM8 API failed:',e?.message||e);return json({ok:false,error:'SERVER_ERROR',message:'حصل خطأ داخلي؛ تحقق من إعدادات السيرفر'},500)}}

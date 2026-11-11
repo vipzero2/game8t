@@ -5,16 +5,16 @@ import {DatabaseSync} from 'node:sqlite';
 import {onRequest} from '../functions/api/[[path]].js';
 import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.js';
 import {PasswordHasher} from '../auth-hasher/src/index.js';
-const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/002_email_security.sql',import.meta.url),'utf8'));
+const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/002_email_security.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/003_telegram_stars.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/004_subscription_grants.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
-const DB={prepare(sql){return statement(sql)}};
+const DB={prepare(sql){return statement(sql)},async batch(items){db0.exec('BEGIN');try{const result=[];for(const item of items)result.push(await item.run());db0.exec('COMMIT');return result}catch(e){db0.exec('ROLLBACK');throw e}}};
 let latestEmailCode='';
 const realFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{if(String(url)==='https://api.resend.com/emails'){const email=JSON.parse(options.body);latestEmailCode=email.text.match(/\b\d{6}\b/)?.[0]||'';return Response.json({id:'test-mail-id'})}return realFetch(url,options)};
 const env={DB,RESEND_API_KEY:'re_test_example',EMAIL_FROM:'AIM8 <security@aim8.site>',SESSION_SECRET:'this-is-a-long-random-example-secret-32-characters',PASSWORD_PEPPER:'separate-password-pepper-secret-of-at-least-32-characters',DIRECT_HASH_IN_TEST:true,PAYMENTS_ENABLED:'false',OXAPAY_SANDBOX:'true',OXAPAY_MERCHANT_KEY:''};
 const send=async(method,path,payload={},cookie='',headers={})=>{const req=new Request('https://aim8.site/api'+path,{method,headers:{...(method!=='GET'?{'content-type':'application/json',origin:'https://aim8.site'}:{}),...(cookie?{cookie}:{}),...headers},...(method!=='GET'?{body:JSON.stringify(payload)}:{})});const ans=await onRequest({request:req,env,params:{path:path.slice(1).split('/')}});let data;try{data=await ans.json()}catch{data=await ans.text()}if(path==='/auth/register' && ans.status===200 && data.ok){const verifyReq=new Request('https://aim8.site/api/auth/signup/verify',{method:'POST',headers:{'content-type':'application/json',origin:'https://aim8.site'},body:JSON.stringify({email:payload.email,code:latestEmailCode})});const verified=await onRequest({request:verifyReq,env,params:{path:['auth','signup','verify']}});return {ans:verified,data:await verified.json()};}return {ans,data}};
 let cookie='';let id='';let firstKey;
-test('schema seeds disabled and zero-priced plans',async()=>{const r=await send('GET','/config');assert.equal(r.ans.status,200);assert.equal(r.data.plans.length,3);assert.equal(r.data.paymentsEnabled,false);assert.equal(r.data.plans[0].enabled,false)});
+test('schema seeds disabled and zero-priced plans',async()=>{const r=await send('GET','/config');assert.equal(r.ans.status,200);assert.equal(r.data.plans.length,3);assert.equal(r.data.paymentsEnabled,false);assert.equal(r.data.plans[0].enabled,false);assert.equal(r.data.plans[0].starsEnabled,false);assert.equal(r.data.plans[0].starsPrice,0)});
 test('register, session, login and authentication are functional',async()=>{const r=await send('POST','/auth/register',{name:'Tester',email:'tester@gmail.com',password:'correct horse battery staple'});assert.equal(r.ans.status,201);cookie=r.ans.headers.get('set-cookie').split(';')[0];id=r.data.user.id;const me=await send('GET','/auth/me',{},cookie);assert.equal(me.data.user.email,'tester@gmail.com');const wrong=await send('POST','/auth/login',{email:'tester@gmail.com',password:'wrongpassword123'});assert.equal(wrong.ans.status,401);const ok=await send('POST','/auth/login',{email:'tester@gmail.com',password:'correct horse battery staple'});assert.equal(ok.ans.status,200)});
 test('no public access to admin and no invoice with payments off',async()=>{const a=await send('GET','/admin/overview',{},cookie);assert.equal(a.ans.status,403);const r=await send('POST','/orders',{planId:'month'},cookie);assert.equal(r.ans.status,503)});
 test('admin can activate user subscription; first device stays, second denied',async()=>{db0.prepare("UPDATE users SET role='admin' WHERE id=?").run(id);const adminCookie=cookie;const other=await send('POST','/auth/register',{name:'Customer',email:'customer@gmail.com',password:'another strong password example'});const userId=other.data.user.id;const ad=await send('GET','/admin/overview',{},adminCookie);assert.equal(ad.ans.status,200);const grant=await send('POST','/admin/grant',{userId,days:30,reason:'Subscription testing'},adminCookie);assert.equal(grant.ans.status,200);const phone=await send('POST','/device/login',{email:'customer@gmail.com',password:'another strong password example'});assert.equal(phone.ans.status,200);const token=phone.data.activationToken;
@@ -111,4 +111,62 @@ test('Gmail verified owner may release device without changing subscription',asy
  assert.equal(after.data.user.subscriptionUntil,until);
  const cannotVerifyOld=await send('POST','/device/verify',{email:'customer@gmail.com',challengeId:'anything',signature:'not-real'});
  assert.equal(cannotVerifyOld.ans.status,403);
+});
+
+
+test('Telegram Stars requires a linked account, credits one redemption, and revokes only refunded payment',async()=>{
+  const logged=await send('POST','/auth/login',{email:'customer@gmail.com',password:'another strong password example'});
+  assert.equal(logged.ans.status,200);
+  const userCookie=logged.ans.headers.get('set-cookie').split(';')[0];
+  const target=db0.prepare("SELECT id,subscription_until FROM users WHERE email='customer@gmail.com'").get();
+  const before=target.subscription_until;
+  env.TELEGRAM_BOT_TOKEN='test-only-token';
+  db0.prepare("UPDATE plans SET stars_price=5,stars_enabled=1 WHERE id='week'").run();
+  const calls=[];
+  const oldFetch=globalThis.fetch;
+  globalThis.fetch=async (url,options)=>{
+    if(String(url).startsWith('https://api.telegram.org/bot')){
+      const method=String(url).split('/').pop(),data=JSON.parse(options.body||'{}');
+      calls.push({method,data});
+      if(method==='getMe')return Response.json({ok:true,result:{username:'AIM8_test_bot'}});
+      return Response.json({ok:true,result:true});
+    }
+    return oldFetch(url,options);
+  };
+  try {
+    const begin=await send('POST','/telegram/link',{planId:'week'},userCookie);
+    assert.equal(begin.ans.status,200);
+    const token=new URL(begin.data.url).searchParams.get('start');
+    const secret=base64url(await hmac(env.SESSION_SECRET,'aim8:telegram:webhook:v1'));
+    const event=async(update)=>{
+      const req=new Request('https://aim8.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json','X-Telegram-Bot-Api-Secret-Token':secret},body:JSON.stringify(update)});
+      return onRequest({request:req,env,params:{path:['telegram','webhook']}});
+    };
+    const rejected=await onRequest({request:new Request('https://aim8.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
+    assert.equal(rejected.status,401);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},text:'/start '+token}})).status,200);
+    const invoice=calls.find(x=>x.method==='sendInvoice');
+    assert.ok(invoice,'Telegram invoice should be sent');
+    assert.equal(invoice.data.currency,'XTR');
+    const oid=invoice.data.payload;
+    assert.equal((await event({pre_checkout_query:{id:'pre-1',from:{id:7001},invoice_payload:oid,currency:'XTR',total_amount:5}})).status,200);
+    assert.equal(calls.find(x=>x.method==='answerPreCheckoutQuery').data.ok,true);
+    const payment={invoice_payload:oid,currency:'XTR',total_amount:5,telegram_payment_charge_id:'charge-7001-test'};
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},successful_payment:payment}})).status,200);
+    const paidMessages=calls.filter(x=>x.method==='sendMessage' && x.data.text.includes('كود AIM8'));
+    assert.ok(paidMessages.length>=1);
+    const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
+    const credited=await send('POST','/telegram/redeem',{code},userCookie);
+    assert.equal(credited.ans.status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before+7*86400);assert.equal(db0.prepare("SELECT COUNT(*) c FROM subscription_grants WHERE user_id=? AND source='oxapay'").get(target.id).c,1);
+    const reused=await send('POST','/telegram/redeem',{code},userCookie);
+    assert.equal(reused.ans.status,400);
+    const refund={...payment};
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001},refunded_payment:refund}})).status,200);
+    assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
+    assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
+  }finally{globalThis.fetch=oldFetch;delete env.TELEGRAM_BOT_TOKEN}
 });
