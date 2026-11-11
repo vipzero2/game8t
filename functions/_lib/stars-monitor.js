@@ -48,7 +48,7 @@ export async function reconcileStars(env){
  if(!await lease(env.DB,t))return {ok:true,skipped:true,reason:'scan_already_running'};
  try{
   const paid=(await env.DB.prepare(
-   "SELECT id,telegram_user_id,telegram_charge_id,stars_amount,status FROM telegram_orders WHERE telegram_charge_id IS NOT NULL AND status IN ('paid','redeemed')"
+   "SELECT id,telegram_user_id,telegram_charge_id,stars_amount,status FROM telegram_orders WHERE telegram_charge_id IS NOT NULL AND status IN ('paid','redeemed','refunded')"
   ).all()).results;
   const orders=new Map(paid.map(o=>[o.telegram_charge_id,o]));
   let checked=0,pages=0,revoked=0,alerts=0,unmatched=0,hasMore=false;
@@ -66,6 +66,7 @@ export async function reconcileStars(env){
     // A negative ledger line can also be a regular withdrawal, ad spend,
     // or transfer. Never cancel users based on amount or partner ID alone.
     const order=orders.get(tx.id);
+    if(order?.status==='refunded')continue; // Already reconciled; never flag as unknown.
     if(!order){
      // Unknown negative movement: retain anonymized evidence for admin review.
      await alert(env,'unmatched',tx,amount);
