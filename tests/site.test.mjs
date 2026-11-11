@@ -157,9 +157,10 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     };
     const rejected=await onRequest({request:new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
     assert.equal(rejected.status,401);
-    // A bare /start is NOT a pairing request; it must instruct copying the code.
+    // Bare /start now creates a passwordless Telegram license account.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز (?:ال)?ربط/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/استرجع كود التفعيل/);
+    assert.equal(db0.prepare("SELECT user_id FROM telegram_accounts WHERE telegram_user_id='7001'").get().user_id,'telegram:7001');
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
     // Paste the code as an ordinary Telegram message; account is linked and plans appear.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:begin.data.linkCode}})).status,200);
@@ -171,7 +172,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
     const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
     assert.ok(linkedPicker,'A plan picker should appear inside the bot');
-    assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data),['buy:quarter']);
+    assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data).filter(x=>x.startsWith('buy:')),['buy:quarter']);
     const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE token_hash=?').get(await sha256(token));
     assert.equal(dbLink.plan_id,'quarter'); // legacy schema placeholder only
     assert.ok(dbLink.used_at);
@@ -242,7 +243,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     db0.prepare("UPDATE plans SET stars_enabled=1 WHERE id IN ('half','year')").run();
     await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}});
     const keyboard=calls.filter(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard).at(-1).data.reply_markup.inline_keyboard;
-    assert.deepEqual(keyboard.map(x=>x[0].callback_data),['buy:quarter','buy:half','buy:year']);
+    assert.deepEqual(keyboard.map(x=>x[0].callback_data).filter(x=>x.startsWith('buy:')),['buy:quarter','buy:half','buy:year']);
     for(const [plan,amount] of [['half',250],['year',450]]){
       const beforeInvoices=calls.filter(x=>x.method==='sendInvoice').length;
       assert.equal((await event({callback_query:{id:'buy-test-'+plan,from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:'+plan}})).status,200);
