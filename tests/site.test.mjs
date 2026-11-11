@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {onRequest} from '../functions/api/[[path]].js';
-import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.js';
+import {hmac,base64url,hashPassword,randomToken,sha256} from '../functions/_lib/common.js';
 import {PasswordHasher} from '../auth-hasher/src/index.js';
 const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/002_email_security.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/003_telegram_stars.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/004_subscription_grants.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/005_stars_plans_90_180_365.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
@@ -134,6 +134,17 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     return oldFetch(url,options);
   };
   try {
+    // Stable website URL must redirect unauthenticated users to login, then
+    // redirect valid account holders to their own new Telegram start payload.
+    const anonymous=await send('GET','/telegram/open');
+    assert.equal(anonymous.ans.status,302);
+    assert.equal(anonymous.ans.headers.get('location'),'/auth.html?next=%2Fapi%2Ftelegram%2Fopen');
+    const direct=await send('GET','/telegram/open',{},userCookie);
+    assert.equal(direct.ans.status,302);
+    assert.match(direct.ans.headers.get('location'),/^https:\/\/t\.me\/AIM8_test_bot\?start=[A-Za-z0-9_-]{12}$/);
+    assert.match(direct.ans.headers.get('cache-control'),/no-store/);
+    assert.equal(direct.ans.headers.get('referrer-policy'),'no-referrer');
+    assert.ok(db0.prepare('SELECT 1 AS found FROM telegram_links WHERE token_hash=?').get(await sha256(new URL(direct.ans.headers.get('location')).searchParams.get('start')))?.found);
     const begin=await send('POST','/telegram/link',{},userCookie);
     assert.equal(begin.ans.status,200);
     const token=new URL(begin.data.url).searchParams.get('start');
@@ -148,7 +159,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(rejected.status,401);
     // A bare /start is NOT a pairing request; it must instruct copying the code.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز ربط/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/رمز (?:ال)?ربط/);
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
     // Paste the code as an ordinary Telegram message; account is linked and plans appear.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:begin.data.linkCode}})).status,200);
@@ -161,7 +172,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
     assert.ok(linkedPicker,'A plan picker should appear inside the bot');
     assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data),['buy:quarter']);
-    const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE user_id=? ORDER BY created_at DESC LIMIT 1').get(target.id);
+    const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE token_hash=?').get(await sha256(token));
     assert.equal(dbLink.plan_id,'quarter'); // legacy schema placeholder only
     assert.ok(dbLink.used_at);
     assert.equal((await event({callback_query:{id:'linked-plan-choice',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}})).status,200);
@@ -190,7 +201,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
     // English Telegram users should receive English replies without selecting a language.
     assert.equal((await event({message:{chat:{id:9009,type:'private'},from:{id:9009,language_code:'en-US'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Welcome to AIM8/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Choose one of the three plans/);
     const invoiceCount=calls.filter(x=>x.method==='sendInvoice').length;
     await event({callback_query:{id:'locale-en-invoice',from:{id:7001,language_code:'en'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}});
     assert.equal(calls.filter(x=>x.method==='sendInvoice').length,invoiceCount+1);
