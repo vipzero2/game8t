@@ -12,11 +12,11 @@ This migration adds verified-email and device generation fields to `users`, plus
 
 ## Email provider configuration: Resend
 1. Open https://resend.com and create a Resend account.
-2. Go to Domains and add `aim8.site`, then add the exact DNS verification records supplied by Resend at the DNS provider controlling that domain. Wait for verified status.
+2. Go to Domains and add `8aim.site`, then add the exact DNS verification records supplied by Resend at the DNS provider controlling that domain. Wait for verified status.
 3. Create API key restricted to sending emails.
 4. In Cloudflare Pages → game8t → Settings → Variables and secrets → Production:
    - `RESEND_API_KEY`: Secret containing the API key.
-   - `EMAIL_FROM`: text, e.g. `AIM8 <security@aim8.site>`.
+   - `EMAIL_FROM`: text, e.g. `AIM8 <security@8aim.site>`.
 5. Redeploy Pages to apply bindings and variables. Do not commit secrets or share them in chat.
 
 ## Website paths
