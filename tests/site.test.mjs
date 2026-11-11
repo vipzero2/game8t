@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {onRequest} from '../functions/api/[[path]].js';
-import {hmac,base64url,hashPassword,randomToken} from '../functions/_lib/common.js';
+import {hmac,base64url,hashPassword,randomToken,sha256} from '../functions/_lib/common.js';
 import {PasswordHasher} from '../auth-hasher/src/index.js';
 const db0=new DatabaseSync(':memory:');db0.exec(readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/002_email_security.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/003_telegram_stars.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/004_subscription_grants.sql',import.meta.url),'utf8'));db0.exec(readFileSync(new URL('../db/005_stars_plans_90_180_365.sql',import.meta.url),'utf8'));
 function statement(sql,args=[]){return {bind(...parameters){return statement(sql,parameters)},async first(){return db0.prepare(sql).get(...args)||null},async all(){return {results:db0.prepare(sql).all(...args)}},async run(){const r=db0.prepare(sql).run(...args);return {meta:{changes:r.changes}}}}}
@@ -134,6 +134,17 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     return oldFetch(url,options);
   };
   try {
+    // Stable website URL must redirect unauthenticated users to login, then
+    // redirect valid account holders to their own new Telegram start payload.
+    const anonymous=await send('GET','/telegram/open');
+    assert.equal(anonymous.ans.status,302);
+    assert.equal(anonymous.ans.headers.get('location'),'/auth.html?next=%2Fapi%2Ftelegram%2Fopen');
+    const direct=await send('GET','/telegram/open',{},userCookie);
+    assert.equal(direct.ans.status,302);
+    assert.match(direct.ans.headers.get('location'),/^https:\/\/t\.me\/AIM8_test_bot\?start=[A-Za-z0-9_-]{12}$/);
+    assert.match(direct.ans.headers.get('cache-control'),/no-store/);
+    assert.equal(direct.ans.headers.get('referrer-policy'),'no-referrer');
+    assert.ok(db0.prepare('SELECT 1 AS found FROM telegram_links WHERE token_hash=?').get(await sha256(new URL(direct.ans.headers.get('location')).searchParams.get('start')))?.found);
     const begin=await send('POST','/telegram/link',{},userCookie);
     assert.equal(begin.ans.status,200);
     const token=new URL(begin.data.url).searchParams.get('start');
