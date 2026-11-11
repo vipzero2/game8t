@@ -1,5 +1,6 @@
 import { ApiError, body, constantTime, currentUser, enc, fail, hmac, json, now, randomToken, requireAdmin, sha256, uid, base64url } from './common.js';
 import { entitlementEndSql } from './grants.js';
+import {telegramText} from './telegram-locale.js';
 
 const site = 'https://8aim.site';
 
@@ -17,8 +18,8 @@ async function telegram(env, method, args) {
   return data.result;
 }
 
-async function send(env, chat, text, markup) {
-  return telegram(env, 'sendMessage', { chat_id: chat, text, ...(markup ? { reply_markup: markup } : {}) });
+async function send(env, chat, text, markup, user) {
+  return telegram(env, 'sendMessage', { chat_id: chat, text:telegramText(text,user), ...(markup ? { reply_markup: markup } : {}) });
 }
 function codeFor(env, chargeId) {
   return hmac(env.SESSION_SECRET, 'aim8:stars:code:v1:' + chargeId)
@@ -36,25 +37,25 @@ function fromId(v) { return String(v || ''); }
 function goodPlan(p) {
   return p && ['quarter', 'half', 'year'].includes(p.id) && p.stars_enabled === 1 && Number.isSafeInteger(p.stars_price) && p.stars_price > 0;
 }
-async function sendInvoice(env, chatId, telegramId, planId) {
+async function sendInvoice(env, chatId, telegramId, planId, user) {
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(telegramId).first();
   if (!account || account.chat_id !== chatId) {
-    await send(env, chatId, 'افتح حسابك في ' + site + ' ثم اضغط اشتراك Telegram Stars لربط الحساب.');
+    await send(env, chatId, 'افتح حسابك في ' + site + ' ثم اضغط اشتراك Telegram Stars لربط الحساب.', null, user);
     return;
   }
   const plan = await env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(planId).first();
   if (!goodPlan(plan)) {
-    await send(env, chatId, 'الباقة غير مفعلة للدفع بالنجوم حالياً.');
+    await send(env, chatId, 'الباقة غير مفعلة للدفع بالنجوم حالياً.', null, user);
     return;
   }
   const orderId = 'ts_' + uid();
   await env.DB.prepare('INSERT INTO telegram_orders(id,user_id,telegram_user_id,chat_id,plan_id,duration_days,stars_amount,created_at) VALUES(?,?,?,?,?,?,?,?)')
     .bind(orderId, account.user_id, telegramId, chatId, plan.id, plan.days, plan.stars_price, now()).run();
   await telegram(env, 'sendInvoice', {
-    chat_id: chatId, title: 'AIM8 - ' + plan.name,
-    description: 'اشتراك AIM8 لمدة ' + plan.days + ' يوم. يصدر كود صالح 24 ساعة بعد الدفع.',
+    chat_id: chatId, title: 'AIM8 - ' + telegramText(plan.name,user),
+    description: telegramText('اشتراك AIM8 لمدة ' + plan.days + ' يوم. يصدر كود صالح 24 ساعة بعد الدفع.',user),
     payload: orderId, currency: 'XTR',
-    prices: [{ label: plan.name, amount: plan.stars_price }],
+    prices: [{ label: telegramText(plan.name,user), amount: plan.stars_price }],
     start_parameter: 'aim8-payment'
   });
 }
@@ -108,26 +109,26 @@ async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.');
+    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.',null,message.from);
     const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
-    if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.');
+    if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.',null,message.from);
     return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
-      inline_keyboard: plans.map(p => [{ text: p.name + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
-    });
+      inline_keyboard: plans.map(p => [{ text: telegramText(p.name,message.from) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
+    }, message.from);
   }
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return send(env, chat, 'رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.');
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return send(env, chat, 'رابط غير صحيح. ارجع للموقع للحصول على رابط جديد.',null,message.from);
   const hashed = await sha256(token);
   const link = await env.DB.prepare('SELECT * FROM telegram_links WHERE token_hash=? AND expires_at>? AND used_at IS NULL').bind(hashed, now()).first();
-  if (!link) return send(env, chat, 'انتهت صلاحية الربط. ارجع لموقع AIM8 وابدأ من جديد.');
+  if (!link) return send(env, chat, 'انتهت صلاحية الربط. ارجع لموقع AIM8 وابدأ من جديد.',null,message.from);
   const consumed = await env.DB.prepare('UPDATE telegram_links SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at>?')
     .bind(now(), hashed, now()).run();
-  if (consumed.meta.changes !== 1) return send(env, chat, 'الرابط مستخدم. اطلب رابط جديد من الموقع.');
+  if (consumed.meta.changes !== 1) return send(env, chat, 'الرابط مستخدم. اطلب رابط جديد من الموقع.',null,message.from);
   await env.DB.prepare('INSERT OR IGNORE INTO telegram_accounts(telegram_user_id,user_id,chat_id,linked_at) VALUES(?,?,?,?)')
     .bind(tgId, link.user_id, chat, now()).run();
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
   if (!account || account.user_id !== link.user_id || account.chat_id !== chat)
-    return send(env, chat, 'حساب تيليجرام هذا مربوط بحساب AIM8 مختلف، أو حسابك مربوط بتيليجرام آخر. تواصل مع الدعم.');
-  await sendInvoice(env, chat, tgId, link.plan_id);
+    return send(env, chat, 'حساب تيليجرام هذا مربوط بحساب AIM8 مختلف، أو حسابك مربوط بتيليجرام آخر. تواصل مع الدعم.',null,message.from);
+  await sendInvoice(env, chat, tgId, link.plan_id,message.from);
 }
 
 async function onPreCheckout(env, q) {
@@ -139,11 +140,11 @@ async function onPreCheckout(env, q) {
     q.currency === 'XTR' && q.total_amount === order.stars_amount;
   await telegram(env, 'answerPreCheckoutQuery', {
     pre_checkout_query_id: q.id, ok: !!valid,
-    ...(!valid ? { error_message: 'الفاتورة غير صالحة أو انتهت صلاحيتها. افتح رابط شراء جديد من موقع AIM8.' } : {})
+    ...(!valid ? { error_message: telegramText('الفاتورة غير صالحة أو انتهت صلاحيتها. افتح رابط شراء جديد من موقع AIM8.',q.from) } : {})
   });
 }
 
-async function applyRefund(env, charge) {
+async function applyRefund(env, charge, user) {
   const order = await env.DB.prepare('SELECT * FROM telegram_orders WHERE telegram_charge_id=?').bind(charge).first();
   const event = await env.DB.prepare('SELECT * FROM telegram_refund_inbox WHERE telegram_charge_id=?').bind(charge).first();
   if (!order || !event) return false;
@@ -166,7 +167,7 @@ async function applyRefund(env, charge) {
   ]);
   if (result[0]?.meta?.changes === 1) {
     // Delivery errors should not undo the refund already recorded in D1.
-    try { await send(env, order.chat_id, 'تم تسجيل استرجاع دفعة النجوم. أُلغي كود الدفع وأُزيلت مدة هذه الدفعة فقط.'); }
+    try { await send(env, order.chat_id, 'تم تسجيل استرجاع دفعة النجوم. أُلغي كود الدفع وأُزيلت مدة هذه الدفعة فقط.',null,user); }
     catch (e) { console.error('Could not notify refunded user:', String(e)); }
   }
   return true;
@@ -190,13 +191,13 @@ async function onPaid(env, m, pay) {
   const current = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (current.telegram_charge_id !== charge) throw new ApiError(409, 'CHARGE_MISMATCH', 'Charge ID mismatch');
   // An out-of-order refund update must win over later delivery.
-  await applyRefund(env, charge);
+  await applyRefund(env, charge,m.from);
   const after = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (after.status === 'refunded' || after.status === 'redeemed') return;
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
   await send(env, chat, 'تم الدفع بنجاح ✅\nكود AIM8 الخاص بحسابك:\n' + code +
     '\n\nصالح حتى ' + new Date(after.code_expires_at * 1000).toISOString() +
-    '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/dashboard.html');
+    '\nاستخدمه مرة واحدة في صفحة حسابك على ' + site + '/dashboard.html',null,m.from);
 }
 
 async function onRefund(env, m, pay) {
@@ -214,7 +215,7 @@ async function onMessage(env, m) {
   if (m.refunded_payment) return onRefund(env, m, m.refunded_payment);
   const text = String(m.text || '').trim();
   if (/^\/paysupport(?:@\w+)?\b/i.test(text))
-    return send(env, m.chat.id, 'لدعم الدفع والاسترجاع: افتح ' + site + '/support.html وسجّل تذكرة بحسابك. احتفظ بإيصال تيليجرام.');
+    return send(env, m.chat.id, 'لدعم الدفع والاسترجاع: افتح ' + site + '/support.html وسجّل تذكرة بحسابك. احتفظ بإيصال تيليجرام.',null,m.from);
   const match = text.match(/^\/start(?:@\w+)?(?:\s+([A-Za-z0-9_-]+))?$/);
   if (match) return onStart(env, m, match[1] || '');
 }
@@ -222,12 +223,12 @@ async function onMessage(env, m) {
 async function onCallback(env, q) {
   if (q.message?.chat?.type !== 'private' || !q.from) return;
   const cb = String(q.data || '').match(/^buy:(quarter|half|year)$/);
-  if (!cb) return telegram(env, 'answerCallbackQuery', { callback_query_id: q.id, text: 'خيار غير متاح' });
+  if (!cb) return telegram(env, 'answerCallbackQuery', { callback_query_id: q.id, text: telegramText('خيار غير متاح',q.from) });
   const seen = await env.DB.prepare('INSERT OR IGNORE INTO telegram_callbacks(callback_id,received_at) VALUES(?,?)')
     .bind(q.id, now()).run();
   if (seen.meta.changes !== 1) return;
   await telegram(env, 'answerCallbackQuery', { callback_query_id: q.id });
-  await sendInvoice(env, fromId(q.message.chat.id), fromId(q.from.id), cb[1]);
+  await sendInvoice(env, fromId(q.message.chat.id), fromId(q.from.id), cb[1],q.from);
 }
 
 export async function webhook(ctx) {
