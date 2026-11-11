@@ -136,10 +136,10 @@ export async function redeem(ctx) {
   return json({ ok: true, subscriptionUntil: updated.subscription_until, days: order.duration_days });
 }
 
-async function showBotPlans(env, chat, user) {
+async function showBotPlans(env, chat, user, needsLink=false) {
   const plans = (await env.DB.prepare("SELECT id,name,days,stars_price FROM plans WHERE id IN ('quarter','half','year') AND stars_enabled=1 AND stars_price>0 ORDER BY days").all()).results;
   if (!plans.length) return send(env, chat, 'اشتراكات النجوم غير مفعلة بعد.', null, user);
-  return send(env, chat, 'اختر الباقة لحساب AIM8 المرتبط:', {
+  return send(env, chat, needsLink ? 'اختر إحدى الباقات الثلاث. لإكمال الدفع، اربط حساب AIM8 بالبوت عبر رابط الموقع أو أرسل رمز الربط من صفحة حسابك.' : 'اختر الباقة لحساب AIM8 المرتبط:', {
     inline_keyboard: plans.map(p => [{ text: telegramText(p.name, user) + ' — ' + p.stars_price + ' ⭐', callback_data: 'buy:' + p.id }])
   }, user);
 }
@@ -148,7 +148,7 @@ async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجّل دخولك في ' + site + ' ثم اضغط الحصول على كود التفعيل، وبعدها انسخ رمز ربط تيليجرام من الموقع وأرسله هنا.', null, message.from);
+    if (!existing) return showBotPlans(env, chat, message.from, true);
     return showBotPlans(env, chat, message.from);
   }
   if (!/^[A-Za-z0-9_-]{12,64}$/.test(token))
