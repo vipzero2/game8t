@@ -253,7 +253,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
 });
 
 test('revoked or expired subscription is denied at server-side device verification',async()=>{
-  const record=db0.prepare("SELECT id,subscription_until FROM users WHERE email='customer@gmail.com'").get();
+  const record=db0.prepare("SELECT id,subscription_until,device_public_key FROM users WHERE email='customer@gmail.com'").get();
   assert.ok(record);
   db0.prepare("UPDATE users SET subscription_until=0,device_public_key='mock-device' WHERE id=?").run(record.id);
   try{
