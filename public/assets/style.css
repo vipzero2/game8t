@@ -36,3 +36,6 @@ html[lang="en"] .pool-svg,html[lang="en"] .brand-word{direction:ltr}
   html[lang="en"] .float-chip{right:-10px;left:auto}
   html[lang="en"] .toast{right:15px;left:auto}
 }
+
+/* Keep optional Telegram fallback anchors genuinely hidden until a link exists. */
+[hidden]{display:none!important}
