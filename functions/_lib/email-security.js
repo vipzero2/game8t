@@ -26,8 +26,8 @@ async function mailCode(env,to,purpose,code,language){
  const enLines={signup:'finish creating your account',verify_email:'verify your account email',password_reset:'reset your password',device_change:'unlink your old device and link a new one'};
  const arabic=/^ar(?:-|$)/i.test(String(language||''));
  const text=arabic
-   ? 'AIM8\\n\\nرمز التحقق '+lines[purpose]+' هو: '+code+'\\n\\nالرمز صالح لمدة 10 دقائق ويُستخدم مرة واحدة فقط.\\nإذا لم تطلب هذا الإجراء، تجاهل الرسالة. لا تشارك الرمز مع أي شخص.'
-   : 'AIM8\\n\\nYour verification code to '+enLines[purpose]+' is: '+code+'\\n\\nThis code is valid for 10 minutes and can be used only once.\\nIf you did not request this, ignore this email. Never share the code.';
+   ? 'AIM8\n\nرمز التحقق '+lines[purpose]+' هو: '+code+'\n\nالرمز صالح لمدة 10 دقائق ويُستخدم مرة واحدة فقط.\nإذا لم تطلب هذا الإجراء، تجاهل الرسالة. لا تشارك الرمز مع أي شخص.'
+   : 'AIM8\n\nYour verification code to '+enLines[purpose]+' is: '+code+'\n\nThis code is valid for 10 minutes and can be used only once.\nIf you did not request this, ignore this email. Never share the code.';
  const subject=arabic?subjects[purpose]:enSubjects[purpose];
  let response;
  try{
