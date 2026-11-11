@@ -19,6 +19,15 @@
 <main><div class="container"><div class="page-top"><span class="eyebrow">لوحة الإدارة</span><h1>إدارة AIM8</h1><p><a class="btn small" href="#telegramPayments">مدفوعات تيليجرام والاسترجاع ↓</a></p><p>إدارة المستخدمين والباقات وفك ارتباط الأجهزة — للمدير فقط.</p></div>
 <div class="alert info" id="adminAlert" role="status">جاري التحقق من صلاحية المدير...</div>
 <div class="account-grid"><div class="metric"><small>المستخدمون</small><strong id="statUsers">—</strong></div><div class="metric"><small>اشتراكات فعالة</small><strong id="statActive">—</strong></div><div class="metric"><small>أجهزة مرتبطة</small><strong id="statBound">—</strong></div></div>
+<section class="glass" style="margin-bottom:24px;border-color:#377b79" id="starsMonitor">
+<h2>حماية استرجاع النجوم الخارجي</h2>
+<p>فحص رسمي لسجل معاملات بوت تيليجرام: عند ظهور حركة سالبة تطابق رقم الدفعة الأصلي ومبلغها، تُلغى مدة تلك الدفعة تلقائياً. نقص الرصيد وحده لا يلغي حساب أي مستخدم.</p>
+<div class="page-actions">
+<button type="button" class="btn ghost small" id="adminRunStarsScan">فحص معاملات النجوم الآن</button>
+<button type="button" class="btn dark small" id="adminRefreshStarsMonitor">تحديث حالة الحماية</button>
+</div>
+<p id="starsMonitorStatus" role="status" aria-live="polite">جاري تحميل حالة حماية النجوم...</p>
+</section>
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="telegramPayments">
 <h2>مدفوعات تيليجرام والاسترجاع</h2>
 <p>يظهر آخر 100 طلب من بوت AIM8. الاسترجاع الحقيقي يعيد النجوم للمشتري ويُلغي فقط مدة الدفعة المسترجعة بعد تأكيد تيليجرام. طلب الاسترجاع وحده لا يلغي الاشتراك.</p>
@@ -42,4 +51,4 @@
 </div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · 8aim.site</span></div></div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
-<script src="assets/main.js?v=activate2" defer></script></body></html>
+<script src="assets/main.js?v=starsmonitor1" defer></script></body></html>
