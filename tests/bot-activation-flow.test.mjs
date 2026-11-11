@@ -6,6 +6,8 @@ const read=p=>readFileSync(new URL('../public/'+p,import.meta.url),'utf8');
 test('public purchase flow shows one account-bound bot button, not prices',()=>{
   const home=read('index.html'),dashboard=read('dashboard.html'),legacy=read('checkout.html');
   assert.match(home,/الحصول على كود التفعيل عبر بوت تيليجرام/);
+  assert.match(home,/id="botActivateHome" href="\/api\/telegram\/open"/);
+  assert.match(dashboard,/id="starsStart" href="\/api\/telegram\/open"/);
   assert.match(dashboard,/id="starsStart"/);
   assert.doesNotMatch(home,/checkout\.html\?plan=|150\s*⭐|250\s*⭐|450\s*⭐|Telegram Stars|نجوم/);
   assert.doesNotMatch(dashboard,/id="starsPlan"|Telegram Stars|نجوم|⭐/);
