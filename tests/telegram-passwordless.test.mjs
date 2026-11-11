@@ -95,7 +95,7 @@ test('Telegram account, paid code, one device, free phone transfer and revoked o
 test('Free recovery cannot be claimed without any paid entitlement or forged Telegram identity',async()=>{
  const x=fixture();try{
   await x.bot({message:{chat:{id:8001234,type:'private'},from:{id:8001234,language_code:'ar'},text:'/start'}});
-  assert.equal((await x.bot({callback_query:{id:'recover-no-purchase',from:{id:8001234},message:{chat:{id:8001234,type:'private'}},data:'recover:confirm'}})).status,200);
+  assert.equal((await x.bot({callback_query:{id:'recover-no-purchase',from:{id:8001234,language_code:'ar'},message:{chat:{id:8001234,type:'private'}},data:'recover:confirm'}})).status,200);
   assert.match(x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,/ما عندك اشتراك/);
   const fake=await x.api('/telegram/device/challenge',{telegramId:'8001234'});
   assert.equal(fake.status,200);
