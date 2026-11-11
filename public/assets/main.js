@@ -22,23 +22,71 @@ function el(tag,txt,cls){const node=document.createElement(tag);if(txt!==undefin
 // Website doesn't display payment amounts or let the user choose a plan.
 // The linked Telegram bot owns the package picker and the official invoice.
 async function loadPlans(){return null;}
+// Pre-create the short-lived, account-bound bot link. Once ready, the button
+// is a native <a href="https://t.me/..."> so app opening keeps user activation.
+// No plan is chosen on the site; the picker and invoice stay inside Telegram.
+const botLaunch={url:null,validUntil:0,inflight:null};
+const botLoginUrl='auth.html?next=dashboard.html';
+const botFallbackId=btn=>btn.id==='botActivateHome'?'botLinkBackupHome':'botLinkBackupDash';
+function botLinkReady(){return !!botLaunch.url&&Date.now()<botLaunch.validUntil-30000;}
+function showBotDirectLink(button,url){
+ const backup=$(botFallbackId(button));
+ if(backup){backup.href=url;backup.hidden=false;backup.rel='noreferrer';}
+ const status=$(button.id==='botActivateHome'?'botLaunchStatusHome':'starsResult');
+ if(status)status.textContent='إذا لم يفتح تيليجرام تلقائياً، اضغط زر الرابط المباشر.';
+}
+function setBotButtonUrl(button,url){
+ if(button?.tagName==='A'){button.href=url;button.rel='noreferrer';}
+}
+async function prepareActivationBot(){
+ if(botLinkReady())return botLaunch.url;
+ if(botLaunch.inflight)return botLaunch.inflight;
+ botLaunch.inflight=(async()=>{
+   const data=await post('/telegram/link',{});
+   const url=new URL(data.url);
+   if(url.protocol!=='https:'||url.hostname!=='t.me'||!/^\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(url.pathname))
+     throw Error('رابط تيليجرام غير صالح');
+   const lifetime=Math.min(600,Math.max(60,Number(data.expiresIn)||600));
+   botLaunch.url=url.href;
+   botLaunch.validUntil=Date.now()+lifetime*1000;
+   setBotButtonUrl($('botActivateHome'),url.href);
+   setBotButtonUrl($('starsStart'),url.href);
+   return url.href;
+ })();
+ try{return await botLaunch.inflight;}finally{botLaunch.inflight=null;}
+}
 async function openActivationBot(button,errorNode){
  setBusy(button,true,'جارٍ فتح بوت تيليجرام...');
  try{
-  const data=await post('/telegram/link',{});
-  const url=new URL(data.url);
-  if(url.protocol!=='https:'||url.hostname!=='t.me')throw Error('رابط تيليجرام غير صالح');
-  location.assign(url.href);
+   const url=await prepareActivationBot();
+   showBotDirectLink(button,url); // Always keep a direct, click-to-open fallback.
+   location.assign(url);
  }catch(err){
-  if(err.status===401){location.assign('auth.html?next=dashboard.html');return;}
-  if(errorNode)errorNode.textContent=err.message;
-  else openDialog('تعذّر فتح البوت',err.message);
+   if(err.status===401){location.assign(botLoginUrl);return;}
+   if(errorNode)errorNode.textContent=err.message;
+   else openDialog('تعذّر فتح تيليجرام',err.message);
  }finally{setBusy(button,false);}
 }
-async function homeInit(){
- const button=$('botActivateHome');
- button?.addEventListener('click',event=>{event.preventDefault();openActivationBot(button,null);});
+function attachActivationButton(button,errorNode){
+ if(!button)return;
+ // Background preparation makes the ordinary hyperlink work on the first click.
+ prepareActivationBot().catch(err=>{
+   if(err.status===401)setBotButtonUrl(button,botLoginUrl);
+ });
+ button.addEventListener('click',event=>{
+   if(botLinkReady()&&button.tagName==='A')return; // Native direct click; no async redirect.
+   if(!botLinkReady()&&button.href===new URL(botLoginUrl,location.href).href)return;
+   event.preventDefault();
+   openActivationBot(button,errorNode);
+ });
 }
+async function homeInit(){attachActivationButton($('botActivateHome'),null);}
+window.addEventListener('pageshow',event=>{
+ if(!event.persisted)return;
+ botLaunch.url=null;botLaunch.validUntil=0;
+ const button=$('botActivateHome')||$('starsStart');
+ if(button)prepareActivationBot().catch(()=>{});
+});
 let mode=params.get('mode')==='signup'?'signup':'login';
 function setMode(next){mode=next;const signup=next==='signup';$('tabLogin').classList.toggle('active',!signup);$('tabSignup').classList.toggle('active',signup);$('tabLogin').setAttribute('aria-pressed',String(!signup));$('tabSignup').setAttribute('aria-pressed',String(signup));$('nameWrap').hidden=!signup;$('confirmWrap').hidden=!signup;$('authSubmit').textContent=signup?'إنشاء الحساب ←':'تسجيل الدخول ←';$('password').autocomplete=signup?'new-password':'current-password';$('confirm').required=signup;$('userName').required=signup;}
 async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href='dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
@@ -52,7 +100,7 @@ async function checkoutInit(){ location.replace('dashboard.html#telegramActivati
 async function starsInit(){
  const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
  if(!start||!redeem)return;
- start.addEventListener('click',()=>openActivationBot(start,result));
+ attachActivationButton(start,result);
  redeem.addEventListener('click',async()=>{
    const code=$('starsCode').value.trim();
    if(!code){result.textContent='أدخل الكود أولاً';return;}
