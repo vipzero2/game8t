@@ -157,11 +157,17 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     };
     const rejected=await onRequest({request:new Request('https://8aim.site/api/telegram/webhook',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}),env,params:{path:['telegram','webhook']}});
     assert.equal(rejected.status,401);
-    // Bare /start now creates a passwordless Telegram license account.
+    // First /start requires an explicit language, not a guessed locale.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/استرجع كود التفعيل/);
+    const firstLanguageScreen=calls.filter(x=>x.method==='sendMessage').at(-1).data;
+    assert.match(firstLanguageScreen.text,/Choose your language/);
+    assert.deepEqual(firstLanguageScreen.reply_markup.inline_keyboard[0].map(x=>x.text),['🇸🇦 العربية','🇬🇧 English']);
+    assert.equal(firstLanguageScreen.reply_markup.inline_keyboard.flat().filter(x=>x.text.includes('العربية')).length,1);
     assert.equal(db0.prepare("SELECT user_id FROM telegram_accounts WHERE telegram_user_id='7001'").get().user_id,'telegram:7001');
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
+    // A language selection is stored against the real Telegram ID.
+    assert.equal((await event({callback_query:{id:'lang-7001-ar',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'lang:ar'}})).status,200);
+    assert.equal(db0.prepare("SELECT language_code FROM telegram_language_preferences WHERE telegram_user_id='7001'").get().language_code,'ar');
     // Paste the code as an ordinary Telegram message; account is linked and plans appear.
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:begin.data.linkCode}})).status,200);
     // A new deep link still works in clients that preserve the /start payload.
@@ -170,7 +176,7 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},text:'/start '+secondToken}})).status,200);
     // No invoice may be sent until the buyer selects their plan INSIDE Telegram.
     assert.equal(calls.some(x=>x.method==='sendInvoice'),false);
-    const linkedPicker=calls.find(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard);
+    const linkedPicker=calls.filter(x=>x.method==='sendMessage'&&x.data.reply_markup?.inline_keyboard).at(-1);
     assert.ok(linkedPicker,'A plan picker should appear inside the bot');
     assert.deepEqual(linkedPicker.data.reply_markup.inline_keyboard.map(x=>x[0].callback_data).filter(x=>x.startsWith('buy:')),['buy:quarter']);
     const dbLink=db0.prepare('SELECT plan_id,used_at FROM telegram_links WHERE token_hash=?').get(await sha256(token));
@@ -189,6 +195,9 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     const paidMessages=calls.filter(x=>x.method==='sendMessage' && x.data.text.includes('كود AIM8'));
     assert.ok(paidMessages.length>=1);
     const code=paidMessages[0].data.text.match(/A8-[A-Za-z0-9_-]{28}/)[0];
+    assert.equal(paidMessages[0].data.reply_markup.inline_keyboard[0][0].copy_text.text,code);
+    assert.match(paidMessages[0].data.text,/لا تشاركه/);
+    assert.match(paidMessages[0].data.text,/جهاز واحد/);
     // A buyer who receives their Telegram code must see the real purchase
     // in the same account's dashboard, not just legacy OxaPay orders.
     const botOrders=await send('GET','/auth/me',{},userCookie);
@@ -230,11 +239,14 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
     assert.equal((await event({message:{chat:{id:7001,type:'private'},from:{id:7001,language_code:'ar'},refunded_payment:refund}})).status,200);
     assert.equal(db0.prepare('SELECT subscription_until FROM users WHERE id=?').get(target.id).subscription_until,before);
     assert.equal(db0.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'refunded');
-    // English Telegram users should receive English replies without selecting a language.
+    // The explicit choice overrides Telegram UI language, even on /start.
     assert.equal((await event({message:{chat:{id:9009,type:'private'},from:{id:9009,language_code:'en-US'},text:'/start'}})).status,200);
-    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Choose one of the three plans/);
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Choose your language/);
+    await event({callback_query:{id:'lang-9009-en',from:{id:9009,language_code:'ar'},message:{chat:{id:9009,type:'private'}},data:'lang:en'}});
+    assert.match(calls.filter(x=>x.method==='sendMessage').at(-1).data.text,/Welcome to AIM8/);
+    await event({callback_query:{id:'lang-7001-en',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'lang:en'}});
     const invoiceCount=calls.filter(x=>x.method==='sendInvoice').length;
-    await event({callback_query:{id:'locale-en-invoice',from:{id:7001,language_code:'en'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}});
+    await event({callback_query:{id:'locale-en-invoice',from:{id:7001,language_code:'ar'},message:{chat:{id:7001,type:'private'}},data:'buy:quarter'}});
     assert.equal(calls.filter(x=>x.method==='sendInvoice').length,invoiceCount+1);
     assert.match(calls.filter(x=>x.method==='sendInvoice').at(-1).data.title,/3 Months/);
     assert.match(calls.filter(x=>x.method==='sendInvoice').at(-1).data.description,/subscription for 90 days/);
