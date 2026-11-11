@@ -37,7 +37,8 @@ function bootstrap(page='home',status=200){
       return Response.json({ok:true,url:'https://t.me/AIM8_test_bot?start=012345678901234567890123',expiresIn:600});
     },console,setTimeout,clearTimeout
   };
-  vm.runInNewContext(source,context,{filename:'assets/main.js'});
+  const pageSource=page==='dashboard'?source.replace("else if(page==='dashboard')dashboardInit();","else if(page==='dashboard')starsInit();"):source;
+  vm.runInNewContext(pageSource,context,{filename:'assets/main.js'});
   return {elements,clicks,nav,get requested(){return requested}};
 }
 test('home page prepares a genuine Telegram hyperlink; clicking it needs no async redirect',async()=>{
