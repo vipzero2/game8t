@@ -44,7 +44,7 @@ async function prepareActivationBot(){
  botLaunch.inflight=(async()=>{
    const data=await post('/telegram/link',{});
    const url=new URL(data.url);
-   if(url.protocol!=='https:'||url.hostname!=='t.me'||!/^\\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(url.pathname))
+   if(url.protocol!=='https:'||url.hostname!=='t.me'||!/^\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(url.pathname))
      throw Error('رابط تيليجرام غير صالح');
    const lifetime=Math.min(600,Math.max(60,Number(data.expiresIn)||600));
    botLaunch.url=url.href;
