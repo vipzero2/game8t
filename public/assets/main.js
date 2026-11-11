@@ -119,7 +119,7 @@ window.addEventListener('pageshow',event=>{
 });
 let mode=params.get('mode')==='signup'?'signup':'login';
 function setMode(next){mode=next;const signup=next==='signup';$('tabLogin').classList.toggle('active',!signup);$('tabSignup').classList.toggle('active',signup);$('tabLogin').setAttribute('aria-pressed',String(!signup));$('tabSignup').setAttribute('aria-pressed',String(signup));$('nameWrap').hidden=!signup;$('confirmWrap').hidden=!signup;$('authSubmit').textContent=signup?'إنشاء الحساب ←':'تسجيل الدخول ←';$('password').autocomplete=signup?'new-password':'current-password';$('confirm').required=signup;$('userName').required=signup;}
-async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=next==='/api/telegram/open'?next:'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
+async function authInit(){setMode(mode);$('tabLogin').addEventListener('click',()=>setMode('login'));$('tabSignup').addEventListener('click',()=>setMode('signup'));$('authForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;const payload={email:$('email').value.trim(),password:$('password').value};if(mode==='signup'){payload.name=$('userName').value.trim();if(payload.password!==$('confirm').value){$('authError').textContent='كلمتا المرور غير متطابقتين';return}}const btn=$('authSubmit');setBusy(btn,true);$('authError').textContent='';try{const result=await post(mode==='signup'?'/auth/register':'/auth/login',payload);if(mode==='signup'){sessionStorage.setItem('aim8SignupEmail',payload.email);location.href='verify.html?mode=signup';return;}const next=params.get('next');location.href=['/api/telegram/open','activate.html'].includes(next)?next:'dashboard.html';}catch(err){$('authError').textContent=err.message;showToast(err.message)}finally{setBusy(btn,false)}})}
 async function recoveryInit(){
  const mode=params.get('mode')||'reset';const isSignup=mode==='signup';const heading=$('recoveryTitle');if(heading)heading.textContent=isSignup?'تأكيد إنشاء الحساب':'استعادة كلمة المرور';
  if(isSignup){$('recoveryEmail').value=sessionStorage.getItem('aim8SignupEmail')||'';$('recoveryEmail').readOnly=true;$('sendRecovery').textContent='إعادة إرسال رمز التسجيل';$('recoveryCodeGroup').hidden=false;$('recoveryPassGroup').hidden=true;}
@@ -127,6 +127,28 @@ async function recoveryInit(){
  $('recoveryForm').addEventListener('submit',async ev=>{ev.preventDefault();const email=$('recoveryEmail').value.trim(),code=$('recoveryCode').value.trim();const btn=$('recoverySubmit');setBusy(btn,true);try{if(isSignup){await post('/auth/signup/verify',{email,code});sessionStorage.removeItem('aim8SignupEmail');location.href='dashboard.html';}else{const password=$('recoveryPassword').value;if(password!==$('recoveryConfirm').value)throw Error('كلمتا المرور غير متطابقتين');await post('/auth/password/reset',{email,code,newPassword:password});$('recoveryResult').textContent='تم تغيير كلمة المرور. ادخل إلى حسابك.';btn.hidden=true;}}catch(err){$('recoveryResult').textContent=err.message}finally{setBusy(btn,false)}});
 }
 async function checkoutInit(){ location.replace('dashboard.html#telegramActivation'); }
+async function activateInit(){
+ const form=$('activationForm'),status=$('activationResult'),input=$('activationCode'),submit=$('activationSubmit');
+ if(!form||!status||!input)return;
+ // Keep the activation code on the user's device only: never put it in a URL.
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const code=input.value.trim();
+  if(!/^A8-[A-Za-z0-9_-]{28}$/.test(code)){status.textContent='تحقق من كود التفعيل الذي استلمته من البوت.';return;}
+  setBusy(submit,true,'جارٍ تفعيل الاشتراك...');
+  status.textContent='';
+  try{
+   const data=await post('/telegram/redeem',{code});
+   input.value='';status.textContent='تم تفعيل اشتراك '+data.days+' يوم بنجاح. ينتهي في '+fmtTime(data.subscriptionUntil)+'.';
+   status.style.color='var(--mint)';
+   form.hidden=true;
+  }catch(error){
+   if(error.status===401){location.href='auth.html?next=activate.html';return;}
+   status.textContent=error.message;
+   status.style.color='var(--error)';
+  }finally{setBusy(submit,false);}
+ });
+}
 async function starsInit(){
  const start=$('starsStart'),result=$('starsResult'),redeem=$('starsRedeem');
  if(!start||!redeem)return;
@@ -224,5 +246,5 @@ $('ticketForm').addEventListener('submit',async e=>{e.preventDefault();const btn
 }
 async function adminTicketsInit(){try{const response=await api('/admin/tickets');const root=$('adminTickets');if(!root)return;root.replaceChildren();if(!response.tickets.length)root.append(el('p','لا توجد طلبات دعم.','muted'));response.tickets.forEach(t=>{const wrap=el('div',null,'ticket-card');wrap.append(el('h3',t.subject+' — '+t.email),el('small',fmtTime(t.created_at)+' · '+t.status),el('p',t.message));if(t.reply)wrap.append(el('div','الرد السابق: '+t.reply,'ticket-reply'));const btn=el('button','الرد على الطلب','btn small ghost');btn.type='button';btn.addEventListener('click',async()=>{const answer=prompt(tr('اكتب رد الإدارة:'),t.reply||'');if(!answer||answer.trim().length<3)return;try{await post('/admin/reply-ticket',{ticketId:t.id,reply:answer.trim()});showToast('تم إرسال الرد');adminTicketsInit()}catch(e){openDialog('تعذّر الرد',e.message)}});wrap.append(btn);root.append(wrap)})}catch(err){if($('adminTickets'))$('adminTickets').textContent=err.message}}
 $('downloadDemo')?.addEventListener('click',()=>openDialog('تنزيل التطبيق','لا يوجد رابط تنزيل رسمي بعد. سيظهر فقط بعد تجهيز إصدار Android.'));
-const page=document.body.dataset.page;if(page==='home')homeInit();else if(page==='auth')authInit();else if(page==='recovery')recoveryInit();else if(page==='checkout')checkoutInit();else if(page==='dashboard')dashboardInit();else if(page==='admin'){adminInit();adminTicketsInit();}else if(page==='support')supportInit();
+const page=document.body.dataset.page;if(page==='home')homeInit();else if(page==='auth')authInit();else if(page==='recovery')recoveryInit();else if(page==='checkout')checkoutInit();else if(page==='dashboard')dashboardInit();else if(page==='activate')activateInit();else if(page==='admin'){adminInit();adminTicketsInit();}else if(page==='support')supportInit();
 })();
