@@ -46,14 +46,22 @@ test('Telegram account, paid code, one device, free phone transfer and revoked o
   const tgId=7001234;
   assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:{id:tgId,language_code:'ar',first_name:'Customer'},text:'/start'}})).status,200);
   assert.equal(x.db.prepare('SELECT user_id FROM telegram_accounts WHERE telegram_user_id=?').get(String(tgId)).user_id,'telegram:'+tgId);
+  const langScreen=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  assert.equal(langScreen.reply_markup.inline_keyboard.flat().length,12);
+  assert.equal(langScreen.reply_markup.inline_keyboard[0][0].text,'🇸🇦 العربية');
+  assert.equal((await x.bot({callback_query:{id:'first-lang-ar',from:{id:tgId,language_code:'en'},message:{chat:{id:tgId,type:'private'}},data:'lang:ar'}})).status,200);
   const picker=x.calls.filter(c=>c.method==='sendMessage').at(-1).data.reply_markup.inline_keyboard;
   assert.equal(picker[0][0].callback_data,'buy:quarter');
-  assert.equal(picker.at(-1)[0].callback_data,'recover:ask');
+  assert.equal(picker.at(-2)[0].callback_data,'recover:ask');
+  assert.equal(picker.at(-1)[0].callback_data,'lang:menu');
   assert.equal((await x.bot({callback_query:{id:'buy-1',from:{id:tgId},message:{chat:{id:tgId,type:'private'}},data:'buy:quarter'}})).status,200);
   const orderId=x.calls.find(c=>c.method==='sendInvoice').data.payload;
   assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:{id:tgId,language_code:'ar'},successful_payment:{invoice_payload:orderId,currency:'XTR',total_amount:150,telegram_payment_charge_id:'paid-charge-test'}}})).status,200);
-  const paidText=x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,code=paidText.match(/A8-[A-Za-z0-9_-]{28}/)?.[0];
+  const paidMsg=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  const paidText=paidMsg.text,code=paidText.match(/A8-[A-Za-z0-9_-]{28}/)?.[0];
   assert.ok(code,'paid code delivered');
+  assert.equal(paidMsg.reply_markup.inline_keyboard[0][0].copy_text.text,code);
+  assert.match(paidText,/لا تشاركه/);
   const a=x.phone();
   const challenge=await x.api('/telegram/device/challenge',{telegramId:String(tgId)});
   assert.equal(challenge.status,200);
@@ -74,8 +82,10 @@ test('Telegram account, paid code, one device, free phone transfer and revoked o
   assert.equal(reject.status,403);
   assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:{id:tgId},text:'/recover'}})).status,200);
   assert.equal((await x.bot({callback_query:{id:'recover-1',from:{id:tgId},message:{chat:{id:tgId,type:'private'}},data:'recover:confirm'}})).status,200);
-  const recoveredText=x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,recoveredCode=recoveredText.match(/A8-[A-Za-z0-9_-]{28}/)?.[0];
+  const recoveryMsg=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  const recoveredText=recoveryMsg.text,recoveredCode=recoveredText.match(/A8-[A-Za-z0-9_-]{28}/)?.[0];
   assert.ok(recoveredCode);assert.notEqual(recoveredCode,code);
+  assert.equal(recoveryMsg.reply_markup.inline_keyboard[0][0].copy_text.text,recoveredCode);
   assert.equal(x.db.prepare('SELECT device_public_key FROM users WHERE id=?').get('telegram:'+tgId).device_public_key,null);
   assert.equal(x.db.prepare('SELECT subscription_until FROM users WHERE id=?').get('telegram:'+tgId).subscription_until,expiry);
   const oldCheck=await x.api('/telegram/device/challenge',{telegramId:String(tgId)});
@@ -95,12 +105,40 @@ test('Telegram account, paid code, one device, free phone transfer and revoked o
 test('Free recovery cannot be claimed without any paid entitlement or forged Telegram identity',async()=>{
  const x=fixture();try{
   await x.bot({message:{chat:{id:8001234,type:'private'},from:{id:8001234,language_code:'ar'},text:'/start'}});
+  await x.bot({callback_query:{id:'no-purchase-lang',from:{id:8001234,language_code:'ar'},message:{chat:{id:8001234,type:'private'}},data:'lang:ar'}});
   assert.equal((await x.bot({callback_query:{id:'recover-no-purchase',from:{id:8001234,language_code:'ar'},message:{chat:{id:8001234,type:'private'}},data:'recover:confirm'}})).status,200);
-  assert.match(x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,/ما عندك اشتراك/);
+  assert.match(x.calls.filter(c=>c.method==='sendMessage').at(-1).data.text,/لا يوجد اشتراك/);
   const fake=await x.api('/telegram/device/challenge',{telegramId:'8001234'});
   assert.equal(fake.status,200);
   const p=x.phone(),attempt=await x.api('/telegram/device/activate',{code:'A8-'+'a'.repeat(28),publicKey:p.publicKey,challengeId:fake.data.challengeId,signature:p.sign('AIM8:telegram:activate:'+fake.data.challengeId+':'+fake.data.nonce)});
   assert.notEqual(attempt.status,200);
   assert.equal(x.db.prepare('SELECT COUNT(*) n FROM telegram_device_codes').get().n,0);
+ }finally{x.restore()}
+});
+
+test('Telegram purchase replay cannot expose an old code after free replacement',async()=>{
+ const x=fixture();
+ try{
+  const tgId=7100123;
+  const sender={id:tgId,language_code:'en'};
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,text:'/start'}});
+  await x.bot({callback_query:{id:'lang-initial-en',from:sender,message:{chat:{id:tgId,type:'private'}},data:'lang:en'}});
+  await x.bot({callback_query:{id:'buy-en-code',from:sender,message:{chat:{id:tgId,type:'private'}},data:'buy:quarter'}});
+  const oid=x.calls.filter(c=>c.method==='sendInvoice').at(-1).data.payload;
+  const payment={invoice_payload:oid,currency:'XTR',total_amount:150,telegram_payment_charge_id:'replay-charge-7100123'};
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,successful_payment:payment}});
+  const first=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  assert.match(first.text,/Never share it/);
+  assert.match(first.text,/one device only/);
+  const firstCode=first.reply_markup.inline_keyboard[0][0].copy_text.text;
+  await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,text:'/recover'}});
+  await x.bot({callback_query:{id:'recover-before-activation',from:sender,message:{chat:{id:tgId,type:'private'}},data:'recover:confirm'}});
+  const replacement=x.calls.filter(c=>c.method==='sendMessage').at(-1).data;
+  const secondCode=replacement.reply_markup.inline_keyboard[0][0].copy_text.text;
+  assert.notEqual(secondCode,firstCode);
+  const sentBefore=x.calls.filter(c=>c.method==='sendMessage').length;
+  assert.equal((await x.bot({message:{chat:{id:tgId,type:'private'},from:sender,successful_payment:payment}})).status,200);
+  assert.equal(x.calls.filter(c=>c.method==='sendMessage').length,sentBefore,'duplicate webhook must not leak the old code');
+  assert.equal(x.db.prepare('SELECT status FROM telegram_orders WHERE id=?').get(oid).status,'paid');
  }finally{x.restore()}
 });

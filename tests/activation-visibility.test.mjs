@@ -29,8 +29,12 @@ test('Admin shows Telegram paid orders first and keeps legacy orders labeled',()
  assert.match(js,/api\('\/admin\/telegram\/orders'\)/);
  assert.match(js,/\$\('telegramPaymentCount'\)/);
 });
-test('Telegram sends a code usable by AIM8 without a website account',()=>{
- const bot=read('functions/_lib/telegram.js');
- assert.match(bot,/أدخل الكود داخل تطبيق AIM8/);
- assert.match(bot,/\/recover/);
+test('Telegram sends safe, copyable codes without a website account',()=>{
+ const bot=read('functions/_lib/telegram.js'),ui=read('functions/_lib/telegram-bot-ui.js');
+ assert.match(bot,/codeKeyboard\(chosen,code\)/);
+ assert.match(bot,/codeKeyboard\(chosen,result.code\)/);
+ assert.match(ui,/copy_text:\{text:code\}/);
+ assert.match(ui,/لا تشاركه/);
+ assert.match(ui,/جهاز واحد فقط/);
+ assert.match(ui,/\/recover/);
 });
