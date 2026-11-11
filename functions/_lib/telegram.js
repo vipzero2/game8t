@@ -40,7 +40,7 @@ function goodPlan(p) {
 async function sendInvoice(env, chatId, telegramId, planId, user) {
   const account = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(telegramId).first();
   if (!account || account.chat_id !== chatId) {
-    await send(env, chatId, 'افتح حسابك في ' + site + ' ثم اضغط اشتراك Telegram Stars لربط الحساب.', null, user);
+    await send(env, chatId, 'افتح حسابك في ' + site + ' ثم اضغط الحصول على كود التفعيل لربط الحساب.', null, user);
     return;
   }
   const plan = await env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(planId).first();
@@ -120,7 +120,7 @@ async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
   if (!token) {
     const existing = await env.DB.prepare('SELECT * FROM telegram_accounts WHERE telegram_user_id=?').bind(tgId).first();
-    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجل حسابك في ' + site + ' ثم اختَر باقة Telegram Stars من الموقع.', null, message.from);
+    if (!existing) return send(env, chat, 'أهلاً بك في AIM8. سجّل دخولك في ' + site + ' ثم اضغط الحصول على كود التفعيل لربط حسابك.', null, message.from);
     return showBotPlans(env, chat, message.from);
   }
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token))
