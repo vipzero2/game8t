@@ -251,3 +251,18 @@ test('Telegram Stars requires a linked account, credits one redemption, and revo
 
   }finally{globalThis.fetch=oldFetch;delete env.TELEGRAM_BOT_TOKEN}
 });
+
+test('revoked or expired subscription is denied at server-side device verification',async()=>{
+  const record=db0.prepare("SELECT id,subscription_until FROM users WHERE email='customer@gmail.com'").get();
+  assert.ok(record);
+  db0.prepare("UPDATE users SET subscription_until=0 WHERE id=?").run(record.id);
+  try{
+    // Must reject an inactive subscription before attempting signature proof or
+    // consuming a device challenge, even if the client ignores a boolean flag.
+    const r=await send('POST','/device/verify',{email:'customer@gmail.com',challengeId:'unissued',signature:'invalid'});
+    assert.equal(r.ans.status,403);
+    assert.equal(r.data.error,'SUBSCRIPTION_REQUIRED');
+  }finally{
+    db0.prepare('UPDATE users SET subscription_until=? WHERE id=?').run(record.subscription_until,record.id);
+  }
+});
