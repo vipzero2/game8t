@@ -18,16 +18,22 @@ function makeSixDigits(){const buf=new Uint32Array(1);crypto.getRandomValues(buf
 async function hashCode(env,email,purpose,code){
  return base64url(await hmac(env.SESSION_SECRET,'otp:v1:'+purpose+':'+email+':'+code));
 }
-async function mailCode(env,to,purpose,code){
+async function mailCode(env,to,purpose,code,language){
  assertMailer(env);
  const subjects={signup:'تأكيد إنشاء حساب AIM8',verify_email:'تأكيد بريد حساب AIM8',password_reset:'استعادة كلمة مرور AIM8',device_change:'تأكيد تغيير جهاز AIM8'};
  const lines={signup:'لإكمال إنشاء حسابك',verify_email:'لتأكيد بريد حسابك',password_reset:'لتغيير كلمة مرور حسابك',device_change:'لفك ربط جهازك الحالي وربط جهاز جديد'};
- const text='AIM8\n\nرمز التحقق '+lines[purpose]+' هو: '+code+'\n\nالرمز صالح لمدة 10 دقائق ويُستخدم مرة واحدة فقط.\nإذا لم تطلب هذا الإجراء، تجاهل الرسالة. لا تشارك الرمز مع أي شخص.';
+ const enSubjects={signup:'Confirm your AIM8 account',verify_email:'Verify your AIM8 email',password_reset:'Reset your AIM8 password',device_change:'Confirm your AIM8 device change'};
+ const enLines={signup:'finish creating your account',verify_email:'verify your account email',password_reset:'reset your password',device_change:'unlink your old device and link a new one'};
+ const arabic=/^ar(?:-|$)/i.test(String(language||''));
+ const text=arabic
+   ? 'AIM8\n\nرمز التحقق '+lines[purpose]+' هو: '+code+'\n\nالرمز صالح لمدة 10 دقائق ويُستخدم مرة واحدة فقط.\nإذا لم تطلب هذا الإجراء، تجاهل الرسالة. لا تشارك الرمز مع أي شخص.'
+   : 'AIM8\n\nYour verification code to '+enLines[purpose]+' is: '+code+'\n\nThis code is valid for 10 minutes and can be used only once.\nIf you did not request this, ignore this email. Never share the code.';
+ const subject=arabic?subjects[purpose]:enSubjects[purpose];
  let response;
  try{
   response=await fetch('https://api.resend.com/emails',{method:'POST',
    headers:{'authorization':'Bearer '+env.RESEND_API_KEY,'content-type':'application/json'},
-   body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject:subjects[purpose],text}),
+   body:JSON.stringify({from:env.EMAIL_FROM,to:[to],subject,text}),
    signal:AbortSignal.timeout(12000)});
  }catch(err){console.error('AIM8 mail provider request failed',err?.message||err);fail('EMAIL_SEND_FAILED','تعذر إرسال رسالة التحقق حاليًا',503)}
  if(!response.ok){console.error('AIM8 email provider status',response.status);fail('EMAIL_SEND_FAILED','تعذر إرسال رسالة التحقق؛ راجع إعدادات البريد',503)}
@@ -43,7 +49,7 @@ async function issueCode(ctx,email,purpose){
  const old=await env.DB.prepare('SELECT cooldown_until FROM email_security_codes WHERE email=? AND purpose=?').bind(email,purpose).first();
  if(old?.cooldown_until>now())fail('EMAIL_COOLDOWN','انتظر دقيقة قبل طلب رمز آخر',429);
  const code=makeSixDigits();
- await mailCode(env,email,purpose,code);
+ await mailCode(env,email,purpose,code,ctx.request.headers.get('accept-language'));
  await env.DB.prepare(`INSERT INTO email_security_codes(email,purpose,code_hash,attempts,expires_at,cooldown_until,consumed_at)
  VALUES(?,?,?,0,?,?,NULL)
  ON CONFLICT(email,purpose) DO UPDATE SET code_hash=excluded.code_hash,attempts=0,expires_at=excluded.expires_at,cooldown_until=excluded.cooldown_until,consumed_at=NULL`)

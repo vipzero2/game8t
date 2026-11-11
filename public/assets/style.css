@@ -22,3 +22,17 @@
 .ticket-card{padding:15px;border:1px solid #2a485a;border-radius:14px;background:#0d1c2d;margin:12px 0}
 .ticket-card h3{font-size:14px;margin:0 0 5px}.ticket-card p{margin:5px 0}.ticket-card small{color:#8db2bb}
 .ticket-reply{background:#173c42;padding:11px;border-radius:9px;margin-top:9px;font-size:12px;white-space:pre-wrap;color:#c8f4e7}
+
+/* Automatically selected English layout; no manual language control. */
+html[lang="en"] body{direction:ltr;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.65}
+html[lang="en"] .admin-table th,html[lang="en"] .admin-table td{text-align:left}
+html[lang="en"] .check{margin-left:0;margin-right:5px}
+html[lang="en"] .plan-tag{right:auto;left:26px}
+html[lang="en"] .float-chip{left:auto;right:-24px}
+html[lang="en"] .toast{left:auto;right:24px}
+html[lang="en"] input,html[lang="en"] textarea,html[lang="en"] select{text-align:left}
+html[lang="en"] .pool-svg,html[lang="en"] .brand-word{direction:ltr}
+@media(max-width:620px){
+  html[lang="en"] .float-chip{right:-10px;left:auto}
+  html[lang="en"] .toast{right:15px;left:auto}
+}
