@@ -12,12 +12,32 @@
 - Optional owner chat alert after recurring abuse, deduplicated per incident type.
 - Safe re-delivery of unsent paid codes when Telegram's API fails.
 
+## Easier owner alerts: private Telegram pairing
+
+1. Sign in to `https://8aim.site/admin.html#telegramSecurity` as an AIM8 administrator.
+2. Press **Link Telegram to security alerts**.
+3. The server returns a **single-use, five-minute** `t.me` deep link only to the authenticated admin session. Open it from **your own private Telegram account**, then press **Start** in the AIM8 bot.
+4. The bot verifies the link against its hashed D1 token and stores the actual sender's private chat ID. No manual copying of Telegram ID and no Cloudflare variable is required.
+5. Refresh the security report to confirm `alertRecipientConfigured=true`; the recipient is never exposed in the admin report.
+6. To change phones/accounts, create a new link and pair another account. To stop private-chat alerts, press **Unlink alerts** in the same admin section.
+
+If `TELEGRAM_SECURITY_ALERT_CHAT_ID` is already set in Cloudflare, it takes precedence over the website-managed private-chat pairing until removed. Pairing works without this variable.
+
+## Local secure webhook token generator
+
+The admin security section now has **Generate secure token locally** and **Copy token**.
+It calls the browser's `crypto.getRandomValues` to produce 256 random bits.
+The generated token is shown locally and **never submitted to the AIM8 server**;
+copy it to the encrypted Cloudflare Pages Production `TELEGRAM_WEBHOOK_SECRET`
+binding. The text box is cleared on page navigation. Do not share the token
+in tickets, chat, GitHub issues, or screenshots.
+
 ## Required operator action: independent webhook secret
 
 This source change intentionally **does not generate or publish** a secret in GitHub.
 
 1. Open Cloudflare dashboard → Workers & Pages → `game8t` → Settings → Variables and Secrets (Production).
-2. Add a **secret** `TELEGRAM_WEBHOOK_SECRET` (32 to 256 random
+2. Generate the secret inside the AIM8 admin security page (or in a trusted local tool) and add a **secret** `TELEGRAM_WEBHOOK_SECRET` (32 to 256 random
    `A-Z`, `a-z`, `0-9`, `_`, `-` characters). Store it in Cloudflare, **not** the GitHub repo, browser JavaScript, or chat.
 3. Deploy this setting to Production. The new webhook secret takes effect when the Worker is deployed; expect a short bot outage until the Telegram webhook is updated.
 4. As an authenticated AIM8 admin, open `https://8aim.site/admin.html` and press
