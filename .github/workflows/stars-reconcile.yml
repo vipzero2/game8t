@@ -2,9 +2,7 @@ name: AIM8 Telegram Stars chargeback protection
 # Scheduled Stars checks now run via Cloudflare Worker aim8-stars-cron.
 # Keep an authenticated GitHub manual fallback for emergencies.
 on:
-  schedule:
-    # Safety fallback while Cloudflare Access routing is being stabilized.
-    - cron: "2-59/5 * * * *"
+  # Cloudflare Cron has resumed successful scheduled scans. GitHub remains a manual fallback.
   workflow_dispatch:
 
 permissions:
