@@ -39,6 +39,15 @@
 <p><a id="telegramAlertLink" href="#" target="_blank" rel="noopener noreferrer" hidden>افتح تيليجرام لإكمال الربط الآمن (الرابط صالح 5 دقائق)</a></p>
 <p id="telegramAlertPairingStatus" role="status" aria-live="polite">إن أردت تفعيل التنبيهات، اضغط على زر الربط ثم افتح الرابط من حسابك بتيليجرام.</p>
 <p id="telegramSecurityStatus" role="status" aria-live="polite">جاري تحميل حالة حماية البوت...</p>
+<div class="form-group" style="margin-top:18px">
+ <label for="adminWebhookSecretValue">مفتاح Webhook مستقل (يُنشأ على جهازك، ولا يُرسل للموقع)</label>
+ <div class="page-actions">
+  <button type="button" class="btn ghost small" id="adminGenerateWebhookSecret">توليد مفتاح آمن محلياً</button>
+  <button type="button" class="btn dark small" id="adminCopyWebhookSecret">نسخ المفتاح</button>
+ </div>
+ <input id="adminWebhookSecretValue" type="password" readonly autocomplete="off" placeholder="اضغط توليد مفتاح آمن محلياً">
+ <p id="adminWebhookSecretStatus" role="status" aria-live="polite">انسخ المفتاح إلى Cloudflare Production كـ Secret باسم TELEGRAM_WEBHOOK_SECRET. بعد حفظه وإعادة نشر الموقع اضغط زر ربط Webhook الموجود أدناه.</p>
+</div>
 </section>
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="telegramPayments">
 <h2>مدفوعات تيليجرام والاسترجاع</h2>
