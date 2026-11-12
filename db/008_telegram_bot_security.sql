@@ -17,3 +17,10 @@ CREATE TABLE IF NOT EXISTS telegram_security_events(
 );
 CREATE INDEX IF NOT EXISTS idx_telegram_security_events_created
  ON telegram_security_events(created_at);
+
+-- Track code delivery separately from paid order state. If the Telegram API
+-- fails after payment is recorded, a webhook retry can deliver the same code.
+CREATE TABLE IF NOT EXISTS telegram_payment_notifications(
+ order_id TEXT PRIMARY KEY REFERENCES telegram_orders(id),
+ sent_at INTEGER NOT NULL
+);
