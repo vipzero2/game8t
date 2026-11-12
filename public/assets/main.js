@@ -317,6 +317,18 @@ async function adminStarsMonitorInit(){
   if(data.lastError)parts.push('تنبيه: آخر فحص فشل');
   if(data.truncated)parts.push('تنبيه: عدد المعاملات أكبر من نطاق الفحص الأخير');
   output.textContent=parts.join(' | ');
+  const cron=$('starsCronStatus');
+  if(cron){
+   const lastCron=data.cloudflareCronLastSuccess
+     ? new Date(data.cloudflareCronLastSuccess*1000).toLocaleString(userLang==='ar'?'ar-IQ':'en-US')
+     : 'لم يُسجّل تشغيل حتى الآن';
+   cron.textContent=[
+     'Cloudflare Cron: '+(data.cloudflareCronHealthy?'يعمل ✅':'لم يتم التأكد من تشغيله ⚠️'),
+     'مفتاح Cron على Pages: '+(data.cloudflareCronSecretConfigured?'مضبوط ✅':'غير مضبوط ⚠️'),
+     'آخر فحص ناجح من Cloudflare: '+lastCron,
+     ...(data.cloudflareCronLastError?['تحذير: آخر فحص Cloudflare تعثر']:[])
+   ].join(' | ');
+  }
  }catch(err){output.textContent='تعذّر تحميل سجل الحماية: '+err.message;}
 }
 function attachStarsMonitorControls(){
