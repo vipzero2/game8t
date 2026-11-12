@@ -110,7 +110,7 @@ export async function activate(ctx){
  const user=await ctx.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(codeRow.user_id).first();
  if(!user||user.blocked)fail('ACCOUNT_BLOCKED','الاشتراك موقوف',403);
  if(user.device_public_key&&user.device_public_key!==key)
-  fail('DEVICE_ALREADY_BOUND','حسابك مرتبط بجهاز آخر؛ استرجع التفعيل مجاناً من البوت',409);
+  fail('DEVICE_ALREADY_BOUND','حسابك مرتبط بجهاز آخر؛ استرجع التفعيل من البوت',409);
  const cr=await loadChallenge(ctx.env,user.id,challengeId);
  if(!cr)fail('CHALLENGE_EXPIRED','انتهت صلاحية تحدي الجهاز',409);
  if(!await verifyProof(key,signature,`AIM8:telegram:activate:${challengeId}:${cr.nonce}`))

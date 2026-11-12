@@ -414,7 +414,7 @@ async function onMessage(env, m) {
     || text.match(/^([A-Za-z0-9_-]{12,64})$/);
   if (manual) return onStart(env, m, manual[1]);
   if(/^\/code(?:@\w+)?\b/i.test(text))
-    return send(env,m.chat.id,'للحصول على كود جديد مجاناً أرسل /recover ثم أكد نقل الجهاز.',null,m.from);
+    return send(env,m.chat.id,'للحصول على كود جديد أرسل /recover ثم أكد نقل الجهاز.',null,m.from);
   if (/^\/(?:link|connect)(?:@\w+)?$/i.test(text))
     return send(env, m.chat.id, 'انسخ رمز ربط تيليجرام من موقع AIM8 وأرسله هنا برسالة واحدة.', null, m.from);
 }
