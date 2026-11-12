@@ -22,14 +22,30 @@ export async function runStarsCron(env,fetcher=fetch){
   method:'POST',
   headers:{
    'content-type':'application/json',
+   'accept':'application/json',
    'X-AIM8-Cron-Time':stamp,
    'X-AIM8-Cron-Nonce':nonce,
    'X-AIM8-Cron-Signature':signature
   },
   body:'{}',
+  redirect:'manual', // Never follow a login redirect with signed Cron headers.
   signal:AbortSignal.timeout(150000)
  });
+ const contentType=(response.headers.get('content-type')||'').toLowerCase();
+ if(response.status>=300&&response.status<400){
+  const location=response.headers.get('location')||'';
+  let destination='unknown';
+  try{destination=new URL(location,ENDPOINT).hostname}catch{}
+  throw Error('AIM8 Stars Cron redirect HTTP '+response.status+' to '+destination);
+ }
  if(!response.ok)throw Error('AIM8 Stars Cron endpoint returned HTTP '+response.status);
+ if(!contentType.includes('application/json')){
+  const mitigated=response.headers.get('cf-mitigated')||'none';
+  let source='unknown';
+  try{source=new URL(response.url).hostname}catch{}
+  throw Error('AIM8 Stars Cron unexpected HTTP '+response.status+' type '+
+   (contentType.slice(0,80)||'missing')+' source '+source+' cf-mitigated '+mitigated);
+ }
  let result;
  try{result=await response.json()}catch{throw Error('AIM8 Stars Cron response is not valid JSON')}
  if(result?.ok!==true)throw Error('AIM8 Stars reconciliation reported failure');
