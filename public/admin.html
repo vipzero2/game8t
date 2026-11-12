@@ -28,6 +28,15 @@
 </div>
 <p id="starsMonitorStatus" role="status" aria-live="polite">جاري تحميل حالة حماية النجوم...</p>
 <p id="starsCronStatus" role="status" aria-live="polite">⏳ جاري التحقق من فحص Cloudflare Cron المستقل...</p>
+<div class="form-group" style="margin-top:14px">
+ <label for="adminStarsCronSecret">مفتاح Cloudflare Cron مستقل (يُنشأ داخل متصفحك ولا يُرسل لسيرفر AIM8)</label>
+ <div class="page-actions">
+ <button type="button" class="btn ghost small" id="adminGenerateStarsCronSecret">توليد مفتاح Cron</button>
+ <button type="button" class="btn dark small" id="adminCopyStarsCronSecret">نسخ المفتاح</button>
+ </div>
+ <input id="adminStarsCronSecret" type="password" readonly autocomplete="off" placeholder="اضغط توليد مفتاح Cron">
+ <p id="adminStarsCronSecretInfo" role="status">انسخ نفس المفتاح إلى Cloudflare Pages game8t وإلى Worker aim8-stars-cron، باسم STARS_CRON_SECRET، بدون مشاركته في أي محادثة.</p>
+</div>
 </section>
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="telegramSecurity">
 <h2>🛡️ حماية بوت تيليجرام</h2>
