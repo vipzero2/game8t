@@ -85,13 +85,11 @@ test('scheduled-only Worker does not expose an HTTP entrypoint',async()=>{
  const response=await handler.fetch(new Request('https://worker.invalid/'));
  assert.equal(response.status,404);
  let promise;
- const x=fixture();try{
-  await handler.scheduled({cron:'2-59/5 * * * *'},x.env,{
-   waitUntil(p){promise=p}
-  });
-  assert.ok(promise,'scheduled handler must keep the scan alive with waitUntil');
-  // Direct global fetch in this test is the Telegram API mock, not Pages, so
-  // only assert the promise is registered. Swallow its expected mock failure.
-  await promise.catch(()=>{});
- }finally{x.restore()}
+ await handler.scheduled({cron:'2-59/5 * * * *'},{
+  STARS_CRON_SECRET:'invalid'
+ },{
+  waitUntil(p){promise=p}
+ });
+ assert.ok(promise,'scheduled handler must keep the scan alive with waitUntil');
+ await assert.rejects(promise,/missing or invalid/);
 });
