@@ -29,6 +29,7 @@ const endpoints={
  'POST /admin/telegram/security/alert-link':telegram.startSecurityAlertPairing,
  'POST /admin/telegram/security/alert-unlink':telegramSecurity.unlinkAlertPairing,
  'POST /admin/telegram/reconcile':starsMonitor.adminScan,
+ 'POST /telegram/reconcile/cron':starsMonitor.cronScan,
  'POST /telegram/reconcile':async ctx=>{
    if(!await authorizedScheduledRun(ctx.request))
      return json({ok:false,error:'UNAUTHORIZED',message:'Unauthorized scheduler'},401);
