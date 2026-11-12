@@ -402,7 +402,72 @@ async function adminTelegramOrdersInit(){
   }
  }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='تعذّر تحميل مدفوعات تيليجرام';}
 }
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();attachStarsCronSecretGenerator();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();attachTelegramTestAlert();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);window.addEventListener('focus',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+async function friendCodesLoad(){
+ const root=$('friendCodeRows');if(!root)return;
+ try{
+  const result=await api('/admin/friend-codes');
+  root.replaceChildren();
+  if(!result.codes.length){
+   const row=el('tr'),cell=el('td','ماكو أكواد صادرة بعد.');cell.colSpan=5;row.append(cell);root.append(row);return;
+  }
+  const states={ready:'جاهز',redeemed:'مستخدم',expired:'منتهي',cancelled:'ملغى'};
+  for(const item of result.codes){
+   const row=el('tr');
+   [item.telegram_user_id,names[item.plan_id]||item.plan_id,states[item.status]||item.status,
+    item.status==='redeemed'?'تم التفعيل':fmtTime(item.expires_at)].forEach(value=>addCell(row,value));
+   const actions=el('td');
+   if(item.status==='ready'){
+    const button=el('button','إلغاء الكود','btn ghost small');button.type='button';
+    button.addEventListener('click',async()=>{
+     if(!confirm('إلغاء الكود غير المستخدم لهذا الـID؟'))return;
+     setBusy(button,true,'جارٍ الإلغاء...');
+     try{await post('/admin/friend-codes/cancel',{id:item.id});showToast('تم إلغاء الكود');await friendCodesLoad()}
+     catch(e){openDialog('تعذّر إلغاء الكود',e.message)}
+     finally{setBusy(button,false)}
+    });
+    actions.append(button);
+   }else actions.textContent='—';
+   row.append(actions);root.append(row);
+  }
+ }catch(e){
+  root.replaceChildren();
+  const row=el('tr'),cell=el('td','تعذّر تحميل الأكواد: '+e.message);
+  cell.colSpan=5;row.append(cell);root.append(row);
+ }
+}
+function friendCodesInit(){
+ const form=$('friendCodeForm');if(!form)return;
+ $('friendRefreshButton')?.addEventListener('click',friendCodesLoad);
+ $('friendCopyButton')?.addEventListener('click',async()=>{
+  const input=$('friendIssuedCode');if(!input?.value)return;
+  try{await navigator.clipboard.writeText(input.value);showToast('تم نسخ كود التفعيل')}
+  catch{input.focus();input.select();$('friendCodeStatus').textContent='حدد الكود وانسخه يدوياً'}
+ });
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const telegramId=$('friendTelegramId').value.trim(),planId=$('friendPlanId').value;
+  if(!/^[1-9][0-9]{0,15}$/.test(telegramId)){openDialog('Telegram ID','اكتب Telegram ID رقمي صحيح');return}
+  if(!confirm('إصدار كود '+(names[planId]||planId)+' لهذا الـID: '+telegramId+'؟'))return;
+  const button=$('friendIssueButton'),status=$('friendCodeStatus');
+  $('friendIssuedCard').hidden=true;$('friendIssuedCode').value='';
+  setBusy(button,true,'جارٍ إصدار الكود...');
+  try{
+   const result=await post('/admin/friend-codes/issue',{telegramId,planId});
+   $('friendIssuedCode').value=result.code;
+   $('friendIssuedCard').hidden=false;
+   $('friendIssuedDetails').textContent='الـID: '+result.telegramId+' | '+result.durationDays+' يوم | ينتهي الكود: '+
+    new Date(result.expiresAt*1000).toLocaleString(userLang==='ar'?'ar-IQ':'en-US');
+   status.textContent=result.telegramConnected
+    ?'تم إنشاء الكود لهذا الـID. ارسله لصديقك بشكل خاص.'
+    :'تم إنشاء الكود. صاحب الـID لازم يفتح البوت ويرسل /start قبل التفعيل.';
+   showToast('تم إصدار كود خاص بصديقك');
+   await friendCodesLoad();
+  }catch(e){status.textContent='تعذّر إصدار الكود: '+e.message}
+  finally{setBusy(button,false)}
+ });
+ friendCodesLoad();
+}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);friendCodesInit();adminTelegramOrdersInit();adminStarsMonitorInit();attachStarsCronSecretGenerator();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();attachTelegramTestAlert();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);window.addEventListener('focus',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}

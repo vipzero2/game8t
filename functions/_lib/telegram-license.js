@@ -4,6 +4,7 @@
 // Keystore-backed P-256 key. A Telegram ID typed by a client is never auth.
 import {body,fail,now,randomToken,sha256,uid,rateLimit,json,unbase64url,enc} from './common.js';
 import {entitlementEndSql} from './grants.js';
+import {tryActivateFriendCode} from './friend-codes.js';
 
 const codePattern=/^A8-[A-Za-z0-9_-]{28}$/;
 const telegramIdPattern=/^[1-9][0-9]{0,15}$/;
@@ -101,7 +102,11 @@ export async function activate(ctx){
  const hash=await sha256(code);
  const codeRow=await ctx.env.DB.prepare('SELECT * FROM telegram_device_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>?')
   .bind(hash,now()).first();
- if(!codeRow)fail('CODE_EXPIRED','الكود منتهي أو مستخدم؛ اطلب كود مجاني من بوت تيليجرام',409);
+ if(!codeRow){
+  const gifted=await tryActivateFriendCode(ctx,hash,key,challengeId,signature,loadChallenge,verifyProof);
+  if(gifted)return gifted;
+  fail('CODE_EXPIRED','الكود منتهي أو مستخدم؛ اطلب كوداً جديداً',409);
+ }
  const user=await ctx.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(codeRow.user_id).first();
  if(!user||user.blocked)fail('ACCOUNT_BLOCKED','الاشتراك موقوف',403);
  if(user.device_public_key&&user.device_public_key!==key)
