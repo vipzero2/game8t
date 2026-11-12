@@ -3,12 +3,15 @@
 // All persistence uses existing D1 tables; no production migration required.
 import {sha256, now, json, requireAdmin} from './common.js';
 import {telegram,applyRefund} from './telegram.js';
+import {authorizedStarsCron} from './cloudflare-cron-auth.js';
 
 const LEASE='stars:monitor:lease';
 const LAST='stars:monitor:lastSuccess';
 const BALANCE='stars:monitor:balance';
 const LAST_ERROR='stars:monitor:lastError';
 const TRUNCATED='stars:monitor:truncated';
+const CRON_LAST='stars:cron:lastSuccess';
+const CRON_ERROR='stars:cron:lastError';
 const PAGE_SIZE=100;
 const MAX_PAGES=8; // 800 recent movements per pass. Flag truncation for review.
 
@@ -117,6 +120,24 @@ export async function reconcileStars(env){
  }
 }
 
+// Signed Cloudflare Worker scheduler route. This is separate from the
+// existing GitHub OIDC route for safe migration, with a DB nonce fence.
+export async function cronScan(ctx){
+ if(!await authorizedStarsCron(ctx.request,ctx.env))
+  return json({ok:false,error:'UNAUTHORIZED',message:'Unauthorized Cloudflare Cron'},401);
+ try{
+  const result=await reconcileStars(ctx.env);
+  if(!result.skipped){
+   await saveMetric(ctx.env.DB,CRON_LAST,1);
+   await saveMetric(ctx.env.DB,CRON_ERROR,0);
+  }
+  return json({...result,source:'cloudflare-cron'});
+ }catch(e){
+  await saveMetric(ctx.env.DB,CRON_ERROR,1);
+  throw e;
+ }
+}
+
 export async function adminScan(ctx){
  await requireAdmin(ctx);
  return json(await reconcileStars(ctx.env));
@@ -124,12 +145,16 @@ export async function adminScan(ctx){
 export async function monitorStatus(ctx){
  await requireAdmin(ctx);
  const data=(await ctx.env.DB.prepare(
-  "SELECT key,count,reset_at FROM rate_limits WHERE key IN (?,?,?,?,?) OR key LIKE 'stars:monitor:alert:%' ORDER BY reset_at DESC LIMIT 100"
- ).bind(LAST,BALANCE,LAST_ERROR,TRUNCATED,'stars:monitor:balanceDrop').all()).results;
+  "SELECT key,count,reset_at FROM rate_limits WHERE key IN (?,?,?,?,?,?,?) OR key LIKE 'stars:monitor:alert:%' ORDER BY reset_at DESC LIMIT 100"
+ ).bind(LAST,BALANCE,LAST_ERROR,TRUNCATED,'stars:monitor:balanceDrop',CRON_LAST,CRON_ERROR).all()).results;
  const get=k=>data.find(x=>x.key===k);
  return json({ok:true,lastSync:get(LAST)?.reset_at||null,lastRevocations:get(LAST)?.count||0,
   balance:get(BALANCE)?.count??null,balanceAt:get(BALANCE)?.reset_at||null,
   lastError:!!get(LAST_ERROR)?.count,truncated:!!get(TRUNCATED)?.count,
   lastBalanceDrop:get('stars:monitor:balanceDrop')?.count||0,
-  unmatchedAlerts:data.filter(x=>x.key.startsWith('stars:monitor:alert:')).length});
+  unmatchedAlerts:data.filter(x=>x.key.startsWith('stars:monitor:alert:')).length,
+  cloudflareCronSecretConfigured:typeof ctx.env.STARS_CRON_SECRET==='string'&&ctx.env.STARS_CRON_SECRET.length>=43,
+  cloudflareCronLastSuccess:get(CRON_LAST)?.reset_at||null,
+  cloudflareCronHealthy:!!get(CRON_LAST)?.reset_at&&(now()-get(CRON_LAST).reset_at)<900,
+  cloudflareCronLastError:!!get(CRON_ERROR)?.count});
 }
