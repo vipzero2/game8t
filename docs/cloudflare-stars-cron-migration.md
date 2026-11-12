@@ -6,7 +6,7 @@ Cloudflare Cron run appears in the AIM8 admin panel**. Both schedulers share
 the same D1-backed scan lease, so overlapping runs do not double revoke.
 
 Cloudflare Pages does not support Cron Triggers. The separate Worker
-`aim8-stars-cron` runs every five minutes at `2-59/5 * * * *` UTC,
+`aim8-stars-cron` runs every five minutes at `*/5 * * * *` UTC (offset from the legacy GitHub schedule),
 calls the existing Pages Stars endpoint, and authenticates via HMAC-SHA256
 with a fresh 128-bit nonce and a timestamp valid for two minutes.
 D1 stores only keyed nonces for replay prevention. No Telegram bot token or
