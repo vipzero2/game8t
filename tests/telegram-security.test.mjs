@@ -71,7 +71,7 @@ test('transient webhook failure releases lease so Telegram retry can succeed',as
   const update={update_id:1002,message:priv(72112)};
   x.failNextMessage();
   const failed=await x.webhook(update);
-  assert.equal(failed.status,500);
+  assert.equal(failed.status,502);
   const row=x.db.prepare('SELECT status,lease_until FROM telegram_webhook_updates WHERE update_id=?').get(1002);
   assert.equal(row.status,'processing');assert.equal(row.lease_until,0);
   assert.equal((await x.webhook(update)).status,200);
