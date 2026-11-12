@@ -77,6 +77,14 @@ export async function securityEvent(env,category,actor='unknown'){
  await ensureSecuritySchema(env);
  const digest=base64url(await hmac(env.SESSION_SECRET,'aim8:telegram:audit:v1:'+String(actor))).slice(0,32);
  const t=now();
+ // One audit entry per abusive actor/category/minute. Prevent DB growth and
+ // repeated alerts if an attacker floods the bot with tens of thousands
+ // of requests; the actual rate-limit still blocks every rejected request.
+ const sampleKey='telegram:security:sample:'+category+':'+digest;
+ const sample=await env.DB.prepare(`INSERT INTO rate_limits(key,count,reset_at) VALUES(?,1,?)
+ ON CONFLICT(key) DO UPDATE SET count=1,reset_at=excluded.reset_at
+ WHERE rate_limits.reset_at<?`).bind(sampleKey,t+60,t).run();
+ if(sample.meta?.changes!==1)return;
  await env.DB.prepare('INSERT INTO telegram_security_events(id,category,actor_digest,created_at) VALUES(?,?,?,?)')
    .bind(uid(),category,digest,t).run();
  // Keep audit retention bounded. The rare event also cleans up old records.
