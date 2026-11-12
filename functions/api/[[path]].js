@@ -25,6 +25,7 @@ const endpoints={
  'POST /admin/telegram/refund':telegram.adminRefund,
  'GET /admin/telegram/reconcile/status':starsMonitor.monitorStatus,
  'GET /admin/telegram/security/status':telegramSecurity.securityStatus,
+ 'POST /admin/telegram/security/test-alert':telegramSecurity.sendTestAlert,
  'POST /admin/telegram/security/alert-link':telegram.startSecurityAlertPairing,
  'POST /admin/telegram/security/alert-unlink':telegramSecurity.unlinkAlertPairing,
  'POST /admin/telegram/reconcile':starsMonitor.adminScan,
