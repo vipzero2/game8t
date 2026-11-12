@@ -235,7 +235,7 @@ function attachWebhookSecretGenerator(){
   }
   const bytes=new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  output.value=btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/g,'');
+  output.value=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/g,'');
   bytes.fill(0);
   if(message)message.textContent='تم توليد المفتاح محلياً؛ لا ترسله لأحد. انسخه إلى Cloudflare Secrets باسم TELEGRAM_WEBHOOK_SECRET. بعد حفظه وإعادة نشر الموقع، اضغط زر ربط Webhook.';
  });
