@@ -116,3 +116,30 @@ test('expired or overwritten alert pairing links cannot take ownership',async()=
   assert.equal(x.db.prepare('SELECT COUNT(*) n FROM telegram_alert_settings').get().n,0);
  }finally{x.cleanup()}
 });
+
+test('admin may send a real alert test only after pairing, limited to three hourly',async()=>{
+ const x=fixture();
+ try{
+  const unauth=await x.post('/admin/telegram/security/test-alert',{},false);
+  assert.equal(unauth.status,401);
+  await x.login();
+  const notLinked=await x.post('/admin/telegram/security/test-alert');
+  assert.equal(notLinked.status,409);
+  assert.equal(notLinked.data.error,'ALERT_NOT_LINKED');
+  const pairing=(await x.post('/admin/telegram/security/alert-link')).data;
+  const token=new URL(pairing.url).searchParams.get('start'),id=79555001;
+  assert.equal((await x.bot(id,token,990)).status,200);
+  for(let i=0;i<3;i++){
+   const result=await x.post('/admin/telegram/security/test-alert');
+   assert.equal(result.status,200,JSON.stringify(result.data));
+   assert.equal(result.data.delivered,true);
+  }
+  const messages=x.calls.filter(m=>m.method==='sendMessage'&&m.args.text.includes('تنبيه أمني تجريبي'));
+  assert.equal(messages.length,3);
+  assert.ok(messages.every(m=>m.args.chat_id===String(id)));
+  assert.ok(messages.every(m=>!m.args.text.includes(String(id))));
+  const fourth=await x.post('/admin/telegram/security/test-alert');
+  assert.equal(fourth.status,429);
+  assert.equal(x.calls.filter(m=>m.method==='sendMessage'&&m.args.text.includes('تنبيه أمني تجريبي')).length,3);
+ }finally{x.cleanup()}
+});

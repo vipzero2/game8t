@@ -212,19 +212,44 @@ function renderStarsAdmin(plans){
  }catch(e){$('adminTelegramStatus').textContent=e.message;}finally{setBusy(btn,false)}});
 }
 async function adminTelegramSecurityInit(){
- const element=$('telegramSecurityStatus');
+ const element=$('telegramSecurityStatus'),state=$('telegramConnectionStatus'),test=$('adminSendTelegramTestAlert');
  if(!element)return;
  try{
   const info=await api('/admin/telegram/security/status');
+  const connected=info.alertRecipientConfigured===true;
+  if(state){
+   state.textContent=connected
+    ?'✅ تم ربط حساب تيليجرام بتنبيهات حماية AIM8. تگدر تختبر وصول رسالة الآن.'
+    :'⚠️ تنبيهات تيليجرام غير مرتبطة بعد. اضغط «ربط حساب تيليجرام بالتنبيهات» وأكمل Start داخل البوت.';
+   state.className=connected?'alert success':'alert warn';
+  }
+  if(test)test.disabled=!connected;
   const attempts=info.events.reduce((sum,x)=>sum+x.total,0);
   const details=info.events.map(x=>x.category+': '+x.total);
   element.textContent=[
    'البلاغات في آخر 24 ساعة: '+attempts,
-   'الحماية المستقلة لـ Webhook: '+(info.independentWebhookSecret?'مفعلة':'تحتاج إعداد'),
-   'تنبيه المدير: '+(info.alertRecipientConfigured?'مفعّل':'غير مفعّل'),
+   'الحماية المستقلة لـ Webhook: '+(info.independentWebhookSecret?'مفعّلة ✅':'تحتاج إعداد ⚠️'),
+   'تنبيه المدير: '+(connected?'مفعّل ✅':'غير مفعّل ⚠️'),
    ...details
   ].join(' | ');
- }catch(e){element.textContent='تعذر تحميل حالة البوت: '+e.message;}
+ }catch(e){
+  element.textContent='تعذر تحميل حالة البوت: '+e.message;
+  if(state){state.textContent='تعذر التحقق من حالة التنبيهات. تأكد من تسجيل الدخول بحساب المدير.';state.className='alert warn';}
+  if(test)test.disabled=true;
+ }
+}
+function attachTelegramTestAlert(){
+ const button=$('adminSendTelegramTestAlert'),status=$('telegramTestAlertStatus');
+ button?.addEventListener('click',async()=>{
+  setBusy(button,true,'جارٍ إرسال التنبيه...');
+  try{
+   const response=await post('/admin/telegram/security/test-alert',{});
+   if(status)status.textContent=response.delivered
+    ?'✅ تيليجرام أكّد استلام التنبيه التجريبي. افتح محادثتك مع بوت AIM8 وشوف الرسالة الجديدة.'
+    :'تعذر التحقق من إرسال التنبيه.';
+  }catch(e){if(status)status.textContent='⚠️ فشل إرسال التنبيه: '+e.message;}
+  finally{setBusy(button,false);}
+ });
 }
 function attachWebhookSecretGenerator(){
  const output=$('adminWebhookSecretValue'),message=$('adminWebhookSecretStatus');
@@ -340,7 +365,7 @@ async function adminTelegramOrdersInit(){
   }
  }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='تعذّر تحميل مدفوعات تيليجرام';}
 }
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();attachTelegramTestAlert();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);window.addEventListener('focus',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}
