@@ -324,14 +324,10 @@ async function onPaid(env, m, pay) {
   }
   const charge = String(pay.telegram_payment_charge_id);
   const code = await codeFor(env, charge), hash = await sha256(code);
-  let newlyPaid=false;
   if (order.status === 'pending') {
     const paid=await env.DB.prepare("UPDATE telegram_orders SET status='paid',paid_at=?,telegram_charge_id=?,code_hash=?,code_expires_at=? WHERE id=? AND status='pending'")
       .bind(now(), charge, hash, now() + 86400, order.id).run();
-    if(paid.meta.changes===1){
-      await issuePaidCode(env,tgId,order.user_id,code);
-      newlyPaid=true;
-    }
+    if(paid.meta.changes===1)await issuePaidCode(env,tgId,order.user_id,code);
   }
   const current = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (current.telegram_charge_id !== charge) throw new ApiError(409, 'CHARGE_MISMATCH', 'Charge ID mismatch');
@@ -340,15 +336,27 @@ async function onPaid(env, m, pay) {
   const after = await env.DB.prepare('SELECT * FROM telegram_orders WHERE id=?').bind(order.id).first();
   if (after.status === 'refunded' || after.status === 'redeemed') return;
   if (after.status !== 'paid') throw new ApiError(409, 'PAYMENT_STATE', 'Unexpected payment state');
-  // Duplicate payment delivery must not resurface an old, burned code after
-  // the customer has used /recover to rotate the device and activation code.
-  if(!newlyPaid)return;
+  // A Telegram webhook may fail AFTER persisting a paid order but BEFORE
+  // delivering its code. Only retry delivery while the same exact code remains
+  // unused and current; never resurrect a code replaced by /recover.
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS telegram_payment_notifications(
+    order_id TEXT PRIMARY KEY REFERENCES telegram_orders(id),
+    sent_at INTEGER NOT NULL
+  )`).run();
+  const delivered=await env.DB.prepare('SELECT sent_at FROM telegram_payment_notifications WHERE order_id=?')
+    .bind(order.id).first();
+  if(delivered)return;
+  const currentCode=await env.DB.prepare('SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?')
+    .bind(tgId).first();
+  if(!currentCode||currentCode.code_hash!==hash||currentCode.used_at!=null||currentCode.expires_at<=now())return;
   const chosen=await getBotLanguage(env,tgId)||'en';
   await send(env,chat,
     [t(chosen,'paid'),t(chosen,'code'),code,
      t(chosen,'expiry',{until:new Date(after.code_expires_at*1000).toISOString()}),
      t(chosen,'rules')].join('\n\n'),
     codeKeyboard(chosen,code),m.from);
+  await env.DB.prepare('INSERT OR IGNORE INTO telegram_payment_notifications(order_id,sent_at) VALUES(?,?)')
+    .bind(order.id,now()).run();
 }
 
 async function onRefund(env, m, pay) {
