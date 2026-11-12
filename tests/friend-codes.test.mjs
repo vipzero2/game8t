@@ -78,12 +78,26 @@ test('Owner can target an ID before /start, then grant one package on first Andr
   assert.equal(x.db.prepare('SELECT COUNT(*) n FROM telegram_orders').get().n,0,
     'gift must not forge a paid Telegram order');
   assert.equal(x.db.prepare("SELECT COUNT(*) n FROM subscription_grants WHERE source='manual'").get().n,1);
+  const extraGift=await x.call('/admin/friend-codes/issue','POST',{telegramId:id,planId:'half'},true);
+  assert.equal(extraGift.status,200);
+  const intruder=x.phone(),anotherChallenge=await x.call('/telegram/device/challenge','POST',{telegramId:id});
+  const blockedOtherDevice=await x.call('/telegram/device/activate','POST',{code:extraGift.data.code,
+   publicKey:intruder.publicKey,challengeId:anotherChallenge.data.challengeId,
+   signature:intruder.sign('AIM8:telegram:activate:'+anotherChallenge.data.challengeId+':'+anotherChallenge.data.nonce)});
+  assert.equal(blockedOtherDevice.status,409,'second Android device is denied even with the right ID and gift');
+  assert.equal(x.db.prepare("SELECT COUNT(*) n FROM subscription_grants WHERE source='manual'").get().n,1,
+    'failed second-device attempt must not add time');
+  const acceptedSameDevice=await x.call('/telegram/device/activate','POST',{code:extraGift.data.code,
+   publicKey:p.publicKey,challengeId:anotherChallenge.data.challengeId,
+   signature:p.sign('AIM8:telegram:activate:'+anotherChallenge.data.challengeId+':'+anotherChallenge.data.nonce)});
+  assert.equal(acceptedSameDevice.status,200,'existing device can receive later gift codes');
+  assert.ok(acceptedSameDevice.data.subscriptionUntil>=activated.data.subscriptionUntil+179*86400);
   const replay=await x.call('/telegram/device/activate','POST',{code:issue.data.code,
    publicKey:p.publicKey,challengeId:ch.data.challengeId,signature:p.sign('unused')});
   assert.equal(replay.status,409,'activation code is burned');
   const list=await x.call('/admin/friend-codes','GET',null,true);
   assert.equal(list.status,200);
-  assert.equal(list.data.codes[0].status,'redeemed');
+  assert.equal(list.data.codes.filter(c=>c.status==='redeemed').length,2);
   assert.equal(JSON.stringify(list.data).includes(issue.data.code),false,'never show stored codes again');
  }finally{x.close()}
 });
@@ -107,7 +121,7 @@ test('Owner can cancel an unused code; another ID cannot take a friend gift',asy
   const next=await x.call('/admin/friend-codes/issue','POST',{telegramId:a,planId:'half'},true);
   assert.equal(next.status,200,'cancel frees ID for a new code');
   const list=await x.call('/admin/friend-codes','GET',null,true);
-  assert.deepEqual(list.data.codes.map(r=>r.status),['ready','cancelled']);
+  assert.deepEqual(list.data.codes.map(r=>r.status).sort(),['cancelled','ready']);
  }finally{x.close()}
 });
 
