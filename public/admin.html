@@ -31,7 +31,13 @@
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="telegramSecurity">
 <h2>🛡️ حماية بوت تيليجرام</h2>
 <p>مراجعة آخر 24 ساعة: منع إغراق الفواتير والرسائل، محاولات الدفع غير المطابقة، وتكرار تحديثات تيليجرام. لا يعرض هذا التقرير أكواد المستخدمين أو Telegram ID.</p>
-<div class="page-actions"><button type="button" class="btn ghost small" id="adminRefreshTelegramSecurity">تحديث تقرير الأمان</button></div>
+<div class="page-actions">
+<button type="button" class="btn ghost small" id="adminRefreshTelegramSecurity">تحديث تقرير الأمان</button>
+<button type="button" class="btn small" id="adminPairTelegramAlerts">ربط حساب تيليجرام بالتنبيهات</button>
+<button type="button" class="btn ghost small" id="adminUnpairTelegramAlerts">إيقاف تنبيهات المحادثة</button>
+</div>
+<p><a id="telegramAlertLink" href="#" target="_blank" rel="noopener noreferrer" hidden>افتح تيليجرام لإكمال الربط الآمن (الرابط صالح 5 دقائق)</a></p>
+<p id="telegramAlertPairingStatus" role="status" aria-live="polite">إن أردت تفعيل التنبيهات، اضغط على زر الربط ثم افتح الرابط من حسابك بتيليجرام.</p>
 <p id="telegramSecurityStatus" role="status" aria-live="polite">جاري تحميل حالة حماية البوت...</p>
 </section>
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="telegramPayments">
@@ -57,4 +63,4 @@
 </div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · 8aim.site</span></div></div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
-<script src="assets/main.js?v=botsecurity1" defer></script></body></html>
+<script src="assets/main.js?v=alertpair1" defer></script></body></html>
