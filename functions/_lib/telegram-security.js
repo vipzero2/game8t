@@ -36,7 +36,12 @@ export async function beginWebhookUpdate(env,updateId){
  status='processing',lease_token=excluded.lease_token,lease_until=excluded.lease_until
  WHERE telegram_webhook_updates.status!='done' AND telegram_webhook_updates.lease_until<?`)
  .bind(updateId,token,t+120,t,t).run();
- if(result.meta?.changes!==1)return {duplicate:true};
+ if(result.meta?.changes!==1){
+  const current=await env.DB.prepare('SELECT status FROM telegram_webhook_updates WHERE update_id=?').bind(updateId).first();
+  // Telegram may retry concurrently. A done receipt gets HTTP 200; a still
+  // processing update gets HTTP 503 so Telegram will retry if this worker dies.
+  return {duplicate:true,inProgress:current?.status!=='done'};
+ }
  // Compact old, completed entries gradually; never prune unfinished payments.
  if(updateId%256===0)await env.DB.prepare("DELETE FROM telegram_webhook_updates WHERE status='done' AND completed_at<?").bind(t-30*86400).run();
  return {duplicate:false,updateId,token};
