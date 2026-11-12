@@ -4,7 +4,7 @@
 // Keystore-backed P-256 key. A Telegram ID typed by a client is never auth.
 import {body,fail,now,randomToken,sha256,uid,rateLimit,json,unbase64url,enc} from './common.js';
 import {entitlementEndSql} from './grants.js';
-import {tryActivateFriendCode} from './friend-codes.js';
+import {tryActivateFriendCode,ensureFriendCodeSchema} from './friend-codes.js';
 
 const codePattern=/^A8-[A-Za-z0-9_-]{28}$/;
 const telegramIdPattern=/^[1-9][0-9]{0,15}$/;
@@ -50,13 +50,44 @@ export async function issuePaidCode(env,tg,userId,code){
    .bind(telegramId,userId,hash,t,t+CODE_LIFETIME).run();
  return code;
 }
+// A read-only account status for the true Telegram user (private bot chat).
+// A gift invitation is not a subscription until Android consumes the code.
+export async function telegramLicenseStatus(env,tg,chat){
+ const telegramId=validateId(tg),chatId=String(chat||'');
+ if(chatId!==telegramId)fail('TELEGRAM_CHAT','يجب استخدام محادثة خاصة مع البوت',403);
+ const account=await env.DB.prepare(`SELECT a.user_id,a.chat_id,u.blocked,u.subscription_until,u.device_public_key
+  FROM telegram_accounts a JOIN users u ON u.id=a.user_id WHERE a.telegram_user_id=?`)
+  .bind(telegramId).first();
+ if(!account||account.chat_id!==chatId)
+  return {state:'needs-start',active:false};
+ if(account.blocked)return {state:'blocked',active:false};
+ const t=now();
+ if(account.subscription_until>t)return {state:'active',active:true,
+  subscriptionUntil:account.subscription_until,deviceBound:!!account.device_public_key};
+ await ensureFriendCodeSchema(env);
+ const gift=await env.DB.prepare(`SELECT plan_id,duration_days,expires_at
+  FROM friend_activation_codes WHERE telegram_user_id=? AND redeemed_at IS NULL
+  AND revoked_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1`)
+  .bind(telegramId,t).first();
+ if(gift)return {state:'pending-gift',active:false,planId:gift.plan_id,
+  durationDays:gift.duration_days,codeExpiresAt:gift.expires_at};
+ const paid=await env.DB.prepare("SELECT id FROM telegram_orders WHERE user_id=? AND status='paid' LIMIT 1")
+  .bind(account.user_id).first();
+ if(paid)return {state:'pending-paid',active:false};
+ return {state:'none',active:false};
+}
 export async function recoverCode(env,tg,chat){
  const telegramId=validateId(tg),chatId=String(chat||'');
  await ensureLicenseSchema(env);
  const account=await env.DB.prepare('SELECT a.user_id,a.chat_id,u.blocked,u.subscription_until FROM telegram_accounts a JOIN users u ON u.id=a.user_id WHERE a.telegram_user_id=?').bind(telegramId).first();
  if(!account||account.chat_id!==chatId||account.blocked)fail('NO_TELEGRAM_ACCOUNT','الحساب غير موجود أو موقوف',403);
  const canRecover=account.subscription_until>now()||await env.DB.prepare("SELECT id FROM telegram_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(account.user_id).first();
- if(!canRecover)fail('NO_ACTIVE_LICENSE','ما عندك اشتراك مدفوع صالح للاسترجاع',409);
+ if(!canRecover){
+  const status=await telegramLicenseStatus(env,telegramId,chatId);
+  if(status.state==='pending-gift')
+   fail('GIFT_NOT_ACTIVATED','عندك كود هدية جاهز، لكنه بعده ما تفعل. فعّله داخل تطبيق AIM8 أولاً، وبعدها يصير الاسترجاع المجاني متاحاً.',409);
+  fail('NO_ACTIVE_LICENSE','ما عندك اشتراك مفعّل صالح للاسترجاع',409);
+ }
  await rateLimit(env,'telegram:recover:'+telegramId,5,86400);
  const code='A8-'+randomToken(21),hash=await sha256(code),t=now();
  await env.DB.batch([
