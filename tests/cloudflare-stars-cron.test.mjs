@@ -85,7 +85,7 @@ test('scheduled-only Worker does not expose an HTTP entrypoint',async()=>{
  const response=await handler.fetch(new Request('https://worker.invalid/'));
  assert.equal(response.status,404);
  let promise;
- await handler.scheduled({cron:'2-59/5 * * * *'},{
+ await handler.scheduled({cron:'*/5 * * * *'},{
   STARS_CRON_SECRET:'invalid'
  },{
   waitUntil(p){promise=p}
