@@ -3,7 +3,7 @@ import { entitlementEndSql } from './grants.js';
 import {telegramText} from './telegram-locale.js';
 import {ensureTelegramAccount,ensureLicenseSchema,issuePaidCode,recoverCode} from './telegram-license.js';
 import {getBotLanguage,setBotLanguage,languagePicker,t,planLabel,codeKeyboard} from './telegram-bot-ui.js';
-import {beginWebhookUpdate,completeWebhookUpdate,failWebhookUpdate,enforceBotLimit,securityEvent} from './telegram-security.js';
+import {beginWebhookUpdate,completeWebhookUpdate,failWebhookUpdate,enforceBotLimit,securityEvent,completeAlertPairing,createAlertPairing} from './telegram-security.js';
 
 const site = 'https://8aim.site';
 
@@ -184,6 +184,12 @@ async function showBotPlans(env,chat,user){
 
 async function onStart(env, message, token) {
   const tgId = fromId(message.from?.id), chat = fromId(message.chat?.id);
+  if(/^alert_[A-Za-z0-9_-]{32}$/.test(token)){
+    const success=await completeAlertPairing(env,tgId,chat,token.slice(6));
+    return send(env,chat,success
+      ?'🛡️ تم ربط حسابك بنجاح! تنبيهات حماية AIM8 سوف تصلك هنا عند رصد محاولات مشبوهة.'
+      :'رابط تنبيهات الحماية غير صالح أو مستخدم أو انتهت صلاحيته. اطلب رابطاً جديداً من لوحة إدارة AIM8.',null,message.from);
+  }
   if (!token) {
     await ensureTelegramAccount(env,tgId,chat,message.from);
     return showBotPlans(env, chat, message.from);
@@ -511,6 +517,12 @@ export async function webhook(ctx) {
     await failWebhookUpdate(ctx.env,lease).catch(()=>{});
     throw e;
   }
+}
+
+export async function startSecurityAlertPairing(ctx){
+ await requireAdmin(ctx);
+ const bot=await telegram(ctx.env,'getMe',{});
+ return createAlertPairing(ctx,String(bot?.username||''));
 }
 
 export async function configureWebhook(ctx) {
