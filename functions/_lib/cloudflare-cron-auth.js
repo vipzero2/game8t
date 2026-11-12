@@ -29,6 +29,6 @@ export async function authorizedStarsCron(request,env){
    .bind(key,t+300).run();
  if(inserted.meta?.changes!==1)return false;
  // Opportunistic compaction, at most once every 15 minutes.
- if(t%900<5)await env.DB.prepare("DELETE FROM rate_limits WHERE key LIKE 'stars:cron:nonce:%' AND reset_at<?").bind(t).run();
+ if(Math.floor(t/300)%3===0)await env.DB.prepare("DELETE FROM rate_limits WHERE key LIKE 'stars:cron:nonce:%' AND reset_at<?").bind(t).run();
  return true;
 }
