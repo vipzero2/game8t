@@ -346,8 +346,16 @@ async function onPaid(env, m, pay) {
   const delivered=await env.DB.prepare('SELECT sent_at FROM telegram_payment_notifications WHERE order_id=?')
     .bind(order.id).first();
   if(delivered)return;
-  const currentCode=await env.DB.prepare('SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?')
+  let currentCode=await env.DB.prepare('SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?')
     .bind(tgId).first();
+  // Recover from a crash between marking the order paid and persisting its
+  // activation code, but never overwrite a newer code from another payment
+  // or from /recover.
+  if(!currentCode && after.code_hash===hash && after.code_expires_at>now()){
+    await issuePaidCode(env,tgId,order.user_id,code);
+    currentCode=await env.DB.prepare('SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?')
+      .bind(tgId).first();
+  }
   if(!currentCode||currentCode.code_hash!==hash||currentCode.used_at!=null||currentCode.expires_at<=now())return;
   const chosen=await getBotLanguage(env,tgId)||'en';
   await send(env,chat,
@@ -492,7 +500,7 @@ export async function webhook(ctx) {
     return new Response('invalid update',{status:400});
   }
   const lease=await beginWebhookUpdate(ctx.env,update.update_id);
-  if(lease?.duplicate)return new Response('ok');
+  if(lease?.duplicate)return new Response(lease.inProgress?'processing':'ok',{status:lease.inProgress?503:200});
   try{
     if(update.message)await onMessage(ctx.env,update.message);
     if(update.pre_checkout_query)await onPreCheckout(ctx.env,update.pre_checkout_query);
