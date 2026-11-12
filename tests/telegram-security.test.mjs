@@ -107,3 +107,44 @@ test('payment pre-checkout mismatches are rejected without issuing activation',a
   assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM telegram_device_codes').get().n,0);
  }finally{x.restore()}
 });
+
+test('Telegram retries a paid-code notification after upstream delivery failure without double billing',async()=>{
+ const x=fixture();
+ try{
+  const id=72115;
+  await x.webhook({update_id:2001,message:priv(id)});
+  await x.webhook({update_id:2002,callback_query:callback(id,'paid-retry-lang','lang:en')});
+  await x.webhook({update_id:2003,callback_query:callback(id,'paid-retry-buy','buy:quarter')});
+  const invoice=x.apiCalls.find(c=>c.method==='sendInvoice')?.args;
+  assert.ok(invoice?.payload);
+  const payment={invoice_payload:invoice.payload,currency:'XTR',total_amount:150,
+   telegram_payment_charge_id:'safe-delivery-retry-charge'};
+  const event={update_id:2004,message:{chat:{id,type:'private'},from:{id,language_code:'en'},successful_payment:payment}};
+  x.failNextMessage();
+  assert.equal((await x.webhook(event)).status,502);
+  assert.equal(x.db.prepare('SELECT status FROM telegram_orders WHERE id=?').get(invoice.payload).status,'paid');
+  assert.equal(x.db.prepare('SELECT status,lease_until FROM telegram_webhook_updates WHERE update_id=2004').get().lease_until,0);
+  assert.equal((await x.webhook(event)).status,200);
+  const delivered=x.apiCalls.filter(c=>c.method==='sendMessage'&&c.args.reply_markup?.inline_keyboard?.[0]?.[0]?.copy_text);
+  assert.equal(delivered.length,2,'one failed send and one successful retry');
+  const code=delivered[1].args.reply_markup.inline_keyboard[0][0].copy_text.text;
+  assert.match(code,/^A8-[A-Za-z0-9_-]{28}$/);
+  assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM telegram_payment_notifications WHERE order_id=?').get(invoice.payload).n,1);
+  const count=x.apiCalls.filter(c=>c.method==='sendMessage').length;
+  assert.equal((await x.webhook({...event,update_id:2005})).status,200);
+  assert.equal(x.apiCalls.filter(c=>c.method==='sendMessage').length,count,'already delivered code should not be resent');
+ }finally{x.restore()}
+});
+
+test('a concurrent pending Telegram update is never acknowledged as delivered',async()=>{
+ const x=fixture();
+ try{
+  const t=Math.floor(Date.now()/1000);
+  x.db.prepare("INSERT INTO telegram_webhook_updates(update_id,status,lease_token,lease_until,received_at) VALUES(2006,'processing','another-worker',?,?)").run(t+60,t);
+  assert.equal((await x.webhook({update_id:2006,message:priv(72116)})).status,503);
+  assert.equal(x.apiCalls.filter(c=>c.method==='sendMessage').length,0);
+  x.db.prepare("UPDATE telegram_webhook_updates SET status='done',completed_at=? WHERE update_id=2006").run(t);
+  assert.equal((await x.webhook({update_id:2006,message:priv(72116)})).status,200);
+  assert.equal(x.apiCalls.filter(c=>c.method==='sendMessage').length,0);
+ }finally{x.restore()}
+});
