@@ -3,6 +3,7 @@ import { entitlementEndSql } from './grants.js';
 import {telegramText} from './telegram-locale.js';
 import {ensureTelegramAccount,ensureLicenseSchema,issuePaidCode,recoverCode} from './telegram-license.js';
 import {getBotLanguage,setBotLanguage,languagePicker,t,planLabel,codeKeyboard} from './telegram-bot-ui.js';
+import {beginWebhookUpdate,completeWebhookUpdate,failWebhookUpdate,enforceBotLimit,securityEvent} from './telegram-security.js';
 
 const site = 'https://8aim.site';
 
@@ -37,6 +38,14 @@ function codeFor(env, chargeId) {
     .then(bytes => 'A8-' + base64url(bytes).slice(0, 28));
 }
 async function webhookSecret(env) {
+  // Dedicated secret is preferred; preserve the legacy derived secret only
+  // until the Cloudflare secret + Telegram setWebhook are configured together.
+  if(env.TELEGRAM_WEBHOOK_SECRET != null){
+    const value=String(env.TELEGRAM_WEBHOOK_SECRET);
+    if(!/^[A-Za-z0-9_-]{32,256}$/.test(value))
+      fail('WEBHOOK_SECRET_CONFIG','Invalid independent Telegram webhook secret',503);
+    return value;
+  }
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32)
     fail('CONFIG_MISSING', 'مفتاح الخادم غير مضبوط', 503);
   return base64url(await hmac(env.SESSION_SECRET, 'aim8:telegram:webhook:v1'));
@@ -54,6 +63,22 @@ async function sendInvoice(env, chatId, telegramId, planId, user) {
   const account = await ensureTelegramAccount(env,telegramId,chatId,user);
   const chosen=await getBotLanguage(env,telegramId);
   if(!chosen)return sendLanguagePicker(env,chatId,user);
+  // Server-side invoice quotas. Neither an inline callback nor a modified
+  // Telegram client can bypass these limits.
+  try{
+    await enforceBotLimit(env,telegramId,'invoice',5,900);
+    await enforceBotLimit(env,telegramId+':daily','invoice',20,86400);
+  }catch(e){
+    if(e instanceof ApiError&&e.code==='RATE_LIMIT')
+      return send(env,chatId,chosen==='ar'?'طلبات شراء كثيرة. حاول لاحقاً.':'Too many payment requests. Please try again later.',null,user);
+    throw e;
+  }
+  const pending=await env.DB.prepare("SELECT COUNT(*) AS total FROM telegram_orders WHERE telegram_user_id=? AND status='pending' AND created_at>?")
+    .bind(telegramId,now()-1800).first();
+  if((pending?.total||0)>=8){
+    await securityEvent(env,'spam_invoice',telegramId);
+    return send(env,chatId,chosen==='ar'?'عندك فواتير كثيرة قيد الانتظار. جرّب بعد انتهاء صلاحيتها.':'Too many pending invoices. Try again after they expire.',null,user);
+  }
   const plan = await env.DB.prepare('SELECT * FROM plans WHERE id=?').bind(planId).first();
   if (!goodPlan(plan))return send(env,chatId,t(chosen,'unavailable'),null,user);
   const orderId = 'ts_' + uid();
@@ -198,6 +223,7 @@ async function onPreCheckout(env, q) {
     order.telegram_user_id === fromId(q.from?.id) &&
     order.created_at > now() - 1800 && order.stars_enabled === 1 &&
     q.currency === 'XTR' && q.total_amount === order.stars_amount;
+  if(!valid)await securityEvent(env,'precheckout_mismatch',fromId(q.from?.id));
   await telegram(env, 'answerPreCheckoutQuery', {
     pre_checkout_query_id: q.id, ok: !!valid,
     ...(!valid ? {error_message:t(await getBotLanguage(env,fromId(q.from?.id))||'en','expiredInvoice')} : {})
@@ -292,7 +318,8 @@ async function onPaid(env, m, pay) {
   if (!order || order.telegram_user_id !== tgId || order.chat_id !== chat ||
       pay.currency !== 'XTR' || pay.total_amount !== order.stars_amount ||
       !pay.telegram_payment_charge_id) {
-    console.error('Unexpected Telegram payment for order:', id);
+    await securityEvent(env,'payment_mismatch',tgId);
+    console.error('Unexpected Telegram payment identifiers');
     throw new ApiError(409, 'PAYMENT_MISMATCH', 'Telegram payment mismatch');
   }
   const charge = String(pay.telegram_payment_charge_id);
@@ -335,8 +362,16 @@ async function onRefund(env, m, pay) {
 
 async function onMessage(env, m) {
   if (m.chat?.type !== 'private' || !m.from || m.from.is_bot) return;
+  if(fromId(m.chat.id)!==fromId(m.from.id))return;
+  // Never throttle real successful payments and refund service updates.
   if (m.successful_payment) return onPaid(env, m, m.successful_payment);
   if (m.refunded_payment) return onRefund(env, m, m.refunded_payment);
+  try{
+    await enforceBotLimit(env,fromId(m.from.id),'message',30,60);
+  }catch(e){
+    if(e instanceof ApiError&&e.code==='RATE_LIMIT')return;
+    throw e;
+  }
   const text = String(m.text || '').trim();
   if(/^\/(?:language|lang)(?:@\w+)?\b/i.test(text))
     return sendLanguagePicker(env,m.chat.id,m.from);
@@ -366,6 +401,15 @@ async function onCallback(env,q){
   if(q.message?.chat?.type!=='private'||!q.from||q.from.is_bot)return;
   const tgId=fromId(q.from.id),chat=fromId(q.message.chat.id),data=String(q.data||'');
   if(chat!==tgId)return;
+  try{
+    await enforceBotLimit(env,tgId,'callback',30,60);
+  }catch(e){
+    if(e instanceof ApiError&&e.code==='RATE_LIMIT'){
+      await telegram(env,'answerCallbackQuery',{callback_query_id:q.id,text:'Too many requests. Try again later.',show_alert:true});
+      return;
+    }
+    throw e;
+  }
   if(data==='lang:menu'){
     await telegram(env,'answerCallbackQuery',{callback_query_id:q.id});
     return sendLanguagePicker(env,chat,q.from);
@@ -401,7 +445,10 @@ async function onCallback(env,q){
          t(chosen,'replaced'),t(chosen,'rules')].join('\n\n'),
         codeKeyboard(chosen,result.code),q.from);
     }catch(e){
-      if(e instanceof ApiError)return send(env,chat,e.code==='NO_ACTIVE_LICENSE'?t(chosen,'noEntitlement'):e.message,null,q.from);
+      if(e instanceof ApiError){
+        if(e.code==='RATE_LIMIT')await securityEvent(env,'recovery_spam',tgId);
+        return send(env,chat,e.code==='NO_ACTIVE_LICENSE'?t(chosen,'noEntitlement'):e.message,null,q.from);
+      }
       throw e;
     }
   }
@@ -417,8 +464,12 @@ async function onCallback(env,q){
 export async function webhook(ctx) {
   if (!ctx.env.TELEGRAM_BOT_TOKEN) return new Response('not configured', { status: 503 });
   const expected = await webhookSecret(ctx.env);
-  if (!sameSecret(ctx.request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '', expected))
+  if (!sameSecret(ctx.request.headers.get('X-Telegram-Bot-Api-Secret-Token') || '', expected)){
+    // Do not write an unbounded DB event for each public unauthenticated
+    // request: that would let attackers create D1 write-amplification.
+    console.warn('Telegram webhook rejected an unauthorized request');
     return new Response('unauthorized', { status: 401 });
+  }
   if (!ctx.request.headers.get('content-type')?.startsWith('application/json'))
     return new Response('invalid type', { status: 415 });
   if (Number(ctx.request.headers.get('content-length') || 0) > 65536)
@@ -427,11 +478,23 @@ export async function webhook(ctx) {
   if (raw.length > 65536) return new Response('too large', { status: 413 });
   let update;
   try { update = JSON.parse(raw); } catch { return new Response('invalid json', { status: 400 }); }
-  if (!update || typeof update !== 'object') return new Response('invalid update', { status: 400 });
-  if (update.message) await onMessage(ctx.env, update.message);
-  if (update.pre_checkout_query) await onPreCheckout(ctx.env, update.pre_checkout_query);
-  if (update.callback_query) await onCallback(ctx.env, update.callback_query);
-  return new Response('ok');
+  if (!update || typeof update !== 'object'||Array.isArray(update))return new Response('invalid update',{status:400});
+  if(update.update_id!=null&&(!Number.isSafeInteger(update.update_id)||update.update_id<0)){
+    await securityEvent(ctx.env,'webhook_payload','bad-update-id');
+    return new Response('invalid update',{status:400});
+  }
+  const lease=await beginWebhookUpdate(ctx.env,update.update_id);
+  if(lease?.duplicate)return new Response('ok');
+  try{
+    if(update.message)await onMessage(ctx.env,update.message);
+    if(update.pre_checkout_query)await onPreCheckout(ctx.env,update.pre_checkout_query);
+    if(update.callback_query)await onCallback(ctx.env,update.callback_query);
+    await completeWebhookUpdate(ctx.env,lease);
+    return new Response('ok');
+  }catch(e){
+    await failWebhookUpdate(ctx.env,lease).catch(()=>{});
+    throw e;
+  }
 }
 
 export async function configureWebhook(ctx) {
