@@ -226,6 +226,32 @@ async function adminTelegramSecurityInit(){
   ].join(' | ');
  }catch(e){element.textContent='تعذر تحميل حالة البوت: '+e.message;}
 }
+function attachWebhookSecretGenerator(){
+ const output=$('adminWebhookSecretValue'),message=$('adminWebhookSecretStatus');
+ $('adminGenerateWebhookSecret')?.addEventListener('click',()=>{
+  if(!output||!globalThis.crypto?.getRandomValues){
+   if(message)message.textContent='التوليد الآمن غير متاح بهذا المتصفح. استخدم متصفح حديث عبر HTTPS.';
+   return;
+  }
+  const bytes=new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  output.value=btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/g,'');
+  bytes.fill(0);
+  if(message)message.textContent='تم توليد المفتاح محلياً؛ لا ترسله لأحد. انسخه إلى Cloudflare Secrets باسم TELEGRAM_WEBHOOK_SECRET. بعد حفظه وإعادة نشر الموقع، اضغط زر ربط Webhook.';
+ });
+ $('adminCopyWebhookSecret')?.addEventListener('click',async()=>{
+  if(!output?.value){
+   if(message)message.textContent='ولّد مفتاحاً أولاً ثم انسخه.';
+   return;
+  }
+  try{
+   await navigator.clipboard.writeText(output.value);
+   if(message)message.textContent='تم نسخ المفتاح. الصقه في Cloudflare كـ Secret مشفّر؛ لا تنشره في GitHub أو المحادثة.';
+  }catch{
+   if(message)message.textContent='تعذّر النسخ التلقائي؛ جرّب تحديد المفتاح ونسخه يدوياً.';
+  }
+ });
+}
 function attachTelegramAlertPairing(){
  const button=$('adminPairTelegramAlerts'),unlink=$('adminUnpairTelegramAlerts');
  button?.addEventListener('click',async()=>{
@@ -314,7 +340,7 @@ async function adminTelegramOrdersInit(){
   }
  }catch(err){root.replaceChildren();const tr=el('tr'),td=el('td',err.message);td.colSpan=6;tr.append(td);root.append(tr);if($('telegramPaymentCount'))$('telegramPaymentCount').textContent='تعذّر تحميل مدفوعات تيليجرام';}
 }
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);adminTelegramOrdersInit();adminStarsMonitorInit();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}
