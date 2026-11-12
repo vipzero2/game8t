@@ -1,7 +1,7 @@
 // Telegram webhook replay protection, abuse throttles, and privacy-safe audit.
 // No customer activation code, bot token, invoice payload, or raw Telegram ID
 // is ever written to the security event log.
-import {ApiError,base64url,fail,hmac,json,now,rateLimit,requireAdmin,uid} from './common.js';
+import {ApiError,base64url,fail,hmac,json,now,rateLimit,requireAdmin,uid,randomToken,sha256} from './common.js';
 
 const updatesSchema=`CREATE TABLE IF NOT EXISTS telegram_webhook_updates(
  update_id INTEGER PRIMARY KEY,
@@ -17,6 +17,67 @@ const eventsSchema=`CREATE TABLE IF NOT EXISTS telegram_security_events(
  actor_digest TEXT NOT NULL,
  created_at INTEGER NOT NULL
 )`;
+// The administrator authorizes pairing from an authenticated website session.
+// A private /start deep-link proves possession of the chosen Telegram chat.
+const pairingSchema=`CREATE TABLE IF NOT EXISTS telegram_alert_pairing(
+ token_hash TEXT PRIMARY KEY,
+ admin_user_id TEXT NOT NULL,
+ created_at INTEGER NOT NULL,
+ expires_at INTEGER NOT NULL,
+ used_at INTEGER,
+ used_nonce TEXT
+)`;
+const settingsSchema=`CREATE TABLE IF NOT EXISTS telegram_alert_settings(
+ name TEXT PRIMARY KEY,
+ telegram_chat_id TEXT NOT NULL,
+ paired_by TEXT NOT NULL,
+ linked_at INTEGER NOT NULL
+)`;
+export async function ensureAlertSchema(env){
+ await env.DB.prepare(pairingSchema).run();
+ await env.DB.prepare(settingsSchema).run();
+}
+async function alertRecipient(env){
+ const overridden=String(env.TELEGRAM_SECURITY_ALERT_CHAT_ID||'');
+ if(/^[1-9][0-9]{0,15}$/.test(overridden))return overridden;
+ await ensureAlertSchema(env);
+ const paired=await env.DB.prepare("SELECT telegram_chat_id FROM telegram_alert_settings WHERE name='security_owner'").first();
+ return /^[1-9][0-9]{0,15}$/.test(String(paired?.telegram_chat_id||''))?String(paired.telegram_chat_id):null;
+}
+export async function createAlertPairing(ctx,botUsername){
+ const admin=await requireAdmin(ctx);
+ if(!/^[A-Za-z0-9_]{5,32}$/.test(botUsername))fail('BOT_NAME','Telegram bot username is missing',503);
+ await ensureAlertSchema(ctx.env);
+ await rateLimit(ctx.env,'telegram:security:owner-link:'+admin.id,6,900);
+ const token=randomToken(24),hash=await sha256(token),t=now();
+ // Clear unused links from the same admin and expired links globally.
+ await ctx.env.DB.prepare('DELETE FROM telegram_alert_pairing WHERE admin_user_id=? OR expires_at<?').bind(admin.id,t).run();
+ await ctx.env.DB.prepare('INSERT INTO telegram_alert_pairing(token_hash,admin_user_id,created_at,expires_at) VALUES(?,?,?,?)')
+  .bind(hash,admin.id,t,t+300).run();
+ return json({ok:true,url:'https://t.me/'+botUsername+'?start=alert_'+token,expiresAt:t+300});
+}
+export async function completeAlertPairing(env,telegramUserId,chatId,token){
+ const id=String(telegramUserId),chat=String(chatId);
+ if(!/^[1-9][0-9]{0,15}$/.test(id)||chat!==id||
+    !/^[A-Za-z0-9_-]{32}$/.test(token))return false;
+ await ensureAlertSchema(env);
+ const t=now(),hash=await sha256(token),nonce=uid();
+ const changes=await env.DB.batch([
+  env.DB.prepare('UPDATE telegram_alert_pairing SET used_at=?,used_nonce=? WHERE token_hash=? AND used_at IS NULL AND expires_at>?')
+   .bind(t,nonce,hash,t),
+  env.DB.prepare(`INSERT INTO telegram_alert_settings(name,telegram_chat_id,paired_by,linked_at)
+    SELECT 'security_owner',?,admin_user_id,? FROM telegram_alert_pairing WHERE token_hash=? AND used_nonce=?
+    ON CONFLICT(name) DO UPDATE SET telegram_chat_id=excluded.telegram_chat_id,paired_by=excluded.paired_by,linked_at=excluded.linked_at`)
+   .bind(chat,t,hash,nonce)
+ ]);
+ return changes[0]?.meta?.changes===1&&changes[1]?.meta?.changes===1;
+}
+export async function unlinkAlertPairing(ctx){
+ await requireAdmin(ctx);
+ await ensureAlertSchema(ctx.env);
+ await ctx.env.DB.prepare("DELETE FROM telegram_alert_settings WHERE name='security_owner'").run();
+ return json({ok:true,envOverrideActive:/^[1-9][0-9]{0,15}$/.test(String(ctx.env.TELEGRAM_SECURITY_ALERT_CHAT_ID||''))});
+}
 const EVENT_TYPES=new Set([
  'webhook_auth','webhook_payload','spam_message','spam_callback',
  'spam_invoice','payment_mismatch','precheckout_mismatch','recovery_spam'
@@ -57,8 +118,8 @@ export async function failWebhookUpdate(env,lease){
  .bind(lease.updateId,lease.token).run();
 }
 async function alertOwner(env,category){
- const recipient=String(env.TELEGRAM_SECURITY_ALERT_CHAT_ID||'');
- if(!/^[1-9][0-9]{0,15}$/.test(recipient)||!env.TELEGRAM_BOT_TOKEN)return;
+ const recipient=await alertRecipient(env);
+ if(!recipient||!env.TELEGRAM_BOT_TOKEN)return;
  const t=now(),key='telegram:security:alert:'+category;
  const granted=await env.DB.prepare(`INSERT INTO rate_limits(key,count,reset_at) VALUES(?,1,?)
  ON CONFLICT(key) DO UPDATE SET count=1,reset_at=excluded.reset_at
@@ -114,5 +175,6 @@ export async function securityStatus(ctx){
  ).bind(cutoff).all()).results;
  return json({ok:true,windowHours:24,events,updates,
   independentWebhookSecret:!!ctx.env.TELEGRAM_WEBHOOK_SECRET,
-  alertRecipientConfigured:!!ctx.env.TELEGRAM_SECURITY_ALERT_CHAT_ID});
+  alertRecipientConfigured:!!await alertRecipient(ctx.env),
+  alertRecipientSource:/^[1-9][0-9]{0,15}$/.test(String(ctx.env.TELEGRAM_SECURITY_ALERT_CHAT_ID||''))?'cloudflare':'admin_pairing'});
 }
