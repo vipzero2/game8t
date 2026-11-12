@@ -8,6 +8,7 @@ import * as emailSecurity from '../_lib/email-security.js';
 import * as telegram from '../_lib/telegram.js';
 import * as telegramLicense from '../_lib/telegram-license.js';
 import * as starsMonitor from '../_lib/stars-monitor.js';
+import * as telegramSecurity from '../_lib/telegram-security.js';
 import {authorizedScheduledRun} from '../_lib/scheduler-identity.js';
 const endpoints={
  'GET /config':payment.plans,
@@ -23,6 +24,7 @@ const endpoints={
  'GET /admin/telegram/orders':telegram.listTelegramOrders,
  'POST /admin/telegram/refund':telegram.adminRefund,
  'GET /admin/telegram/reconcile/status':starsMonitor.monitorStatus,
+ 'GET /admin/telegram/security/status':telegramSecurity.securityStatus,
  'POST /admin/telegram/reconcile':starsMonitor.adminScan,
  'POST /telegram/reconcile':async ctx=>{
    if(!await authorizedScheduledRun(ctx.request))
