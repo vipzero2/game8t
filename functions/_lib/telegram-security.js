@@ -163,6 +163,31 @@ export async function enforceBotLimit(env,actor,kind,max,windowSec){
   throw e;
  }
 }
+// The owner can verify alert delivery without manufacturing suspicious activity.
+// Only a signed-in administrator can trigger this, at most three times per hour.
+export async function sendTestAlert(ctx){
+ const admin=await requireAdmin(ctx);
+ const recipient=await alertRecipient(ctx.env);
+ if(!recipient)fail('ALERT_NOT_LINKED','اربط حساب تيليجرام بالتنبيهات أولاً',409);
+ if(!ctx.env.TELEGRAM_BOT_TOKEN)fail('BOT_NOT_CONFIGURED','توكن البوت غير مضبوط',503);
+ await rateLimit(ctx.env,'telegram:security:test-alert:'+admin.id,3,3600);
+ let response;
+ try{
+  response=await fetch('https://api.telegram.org/bot'+ctx.env.TELEGRAM_BOT_TOKEN+'/sendMessage',{
+   method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({chat_id:recipient,text:'🛡️ AIM8 — تنبيه أمني تجريبي ✅\nهذا اختبار من لوحة الإدارة. ربط تنبيهات الاختراق يعمل بصورة صحيحة. لا يوجد هجوم فعلي.'}),
+   signal:AbortSignal.timeout(6000)
+  });
+ }catch{
+  fail('ALERT_SEND_FAILED','تعذر الوصول إلى تيليجرام لإرسال التنبيه التجريبي',502);
+ }
+ // Never expose Telegram's response fields or the destination chat ID.
+ let reply;
+ try{reply=await response.json()}catch{}
+ if(!response.ok||reply?.ok!==true)
+  fail('ALERT_SEND_FAILED','فشل إرسال التنبيه؛ تأكد أنك فتحت البوت من حسابك ولم تحظره',502);
+ return json({ok:true,delivered:true});
+}
 export async function securityStatus(ctx){
  await requireAdmin(ctx);
  await ensureSecuritySchema(ctx.env);
