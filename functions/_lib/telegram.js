@@ -7,6 +7,25 @@ import {beginWebhookUpdate,completeWebhookUpdate,failWebhookUpdate,enforceBotLim
 
 const site = 'https://8aim.site';
 
+// A friendly expiration date for the Arabic bot (Iraq time). Other
+// bot languages retain UTC with a readable date instead of an ISO string.
+function formatCodeExpiry(seconds,lang){
+ const date=new Date(seconds*1000);
+ if(lang==='ar'){
+  const parts=new Intl.DateTimeFormat('en-GB',{
+   timeZone:'Asia/Baghdad',day:'2-digit',month:'2-digit',year:'numeric',
+   hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+  }).formatToParts(date);
+  const v=k=>parts.find(p=>p.type===k)?.value||'';
+  const hour=Number(v('hour'));
+  return `${v('day')}/${v('month')}/${v('year')} الساعة ${hour%12||12}:${v('minute')} ${hour<12?'صباحاً':'مساءً'}`;
+ }
+ return new Intl.DateTimeFormat('en-GB',{
+  timeZone:'UTC',day:'2-digit',month:'short',year:'numeric',
+  hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+ }).format(date);
+}
+
 export async function telegram(env, method, args) {
   if (!env.TELEGRAM_BOT_TOKEN) fail('BOT_NOT_CONFIGURED', 'توكن تيليجرام غير مضبوط', 503);
   const response = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/' + method, {
@@ -366,7 +385,7 @@ async function onPaid(env, m, pay) {
   const chosen=await getBotLanguage(env,tgId)||'en';
   await send(env,chat,
     [t(chosen,'paid'),t(chosen,'code'),code,
-     t(chosen,'expiry',{until:new Date(after.code_expires_at*1000).toISOString()}),
+     t(chosen,'expiry',{until:formatCodeExpiry(after.code_expires_at,chosen)}),
      t(chosen,'rules')].join('\n\n'),
     codeKeyboard(chosen,code),m.from);
   await env.DB.prepare('INSERT OR IGNORE INTO telegram_payment_notifications(order_id,sent_at) VALUES(?,?)')
@@ -463,7 +482,7 @@ async function onCallback(env,q){
       const result=await recoverCode(env,fromId(q.from.id),fromId(q.message.chat.id));
       return send(env,chat,
         [t(chosen,'replacement'),t(chosen,'code'),result.code,
-         t(chosen,'expiry',{until:new Date(result.expiresAt*1000).toISOString()}),
+         t(chosen,'expiry',{until:formatCodeExpiry(result.expiresAt,chosen)}),
          t(chosen,'replaced'),t(chosen,'rules')].join('\n\n'),
         codeKeyboard(chosen,result.code),q.from);
     }catch(e){
