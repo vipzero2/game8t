@@ -10,6 +10,7 @@ async function ensureSchema(env){
  await env.DB.prepare("CREATE TABLE IF NOT EXISTS review_licenses(id TEXT PRIMARY KEY,code_hash TEXT NOT NULL UNIQUE,label TEXT NOT NULL,created_at INTEGER NOT NULL,created_by TEXT NOT NULL,revoked_at INTEGER)").run();
  await env.DB.prepare("CREATE TABLE IF NOT EXISTS review_sessions(token_hash TEXT PRIMARY KEY,license_id TEXT NOT NULL REFERENCES review_licenses(id),first_seen INTEGER NOT NULL,last_seen INTEGER NOT NULL)").run();
  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_review_sessions_active ON review_sessions(license_id,last_seen)").run();
+ await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_review_one_active ON review_licenses((1)) WHERE revoked_at IS NULL").run();
 }
 async function countActive(env,id,t){
  const row=await env.DB.prepare("SELECT COUNT(*) AS total FROM review_sessions WHERE license_id=? AND last_seen>=?").bind(id,t-ACTIVE_WINDOW).first();
@@ -89,12 +90,15 @@ export async function activate(ctx){
  const d=await body(ctx.request),code=String(d.code||'').trim();
  if(!REVIEW_CODE.test(code))fail('INVALID_CODE','كود المراجعة غير صحيح',400);
  const ip=ctx.request.headers.get('CF-Connecting-IP')||'local';
- await rateLimit(ctx.env,'review:activate:'+ip,30,3600);
+ await rateLimit(ctx.env,'review:activate:'+ip,240,3600);
  await ensureSchema(ctx.env);
  const row=await ctx.env.DB.prepare('SELECT id FROM review_licenses WHERE code_hash=? AND revoked_at IS NULL').bind(await sha256(code)).first();
  if(!row)fail('CODE_REVOKED','كود المراجعة غير صالح أو تم إلغاؤه',403);
  const t=now(),token=randomToken(32),hashed=await sha256(token);
  await ctx.env.DB.prepare('INSERT INTO review_sessions(token_hash,license_id,first_seen,last_seen) VALUES(?,?,?,?)').bind(hashed,row.id,t,t).run();
+ const prior=String(d.previousSessionToken||'');
+ if(SESSION_TOKEN.test(prior))await ctx.env.DB.prepare('DELETE FROM review_sessions WHERE token_hash=? AND license_id=?')
+   .bind(await sha256(prior),row.id).run();
  // Sessions that stopped calling the API disappear from the active count.
  // Retain only recent history; there is no permanent device registration.
  await ctx.env.DB.prepare('DELETE FROM review_sessions WHERE last_seen<?').bind(t-7*86400).run();
