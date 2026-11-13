@@ -7,6 +7,7 @@ import * as support from '../_lib/support.js';
 import * as emailSecurity from '../_lib/email-security.js';
 import * as telegram from '../_lib/telegram.js';
 import * as telegramLicense from '../_lib/telegram-license.js';
+import * as review from '../_lib/review-license.js';
 import * as starsMonitor from '../_lib/stars-monitor.js';
 import * as friendCodes from '../_lib/friend-codes.js';
 import * as telegramSecurity from '../_lib/telegram-security.js';
@@ -19,6 +20,11 @@ const endpoints={
  'POST /telegram/device/challenge':telegramLicense.challenge,
  'POST /telegram/device/activate':telegramLicense.activate,
  'POST /telegram/device/verify':telegramLicense.verify,
+ 'POST /telegram/device/review/activate':review.activate,
+ 'POST /telegram/device/review/verify':review.verify,
+ 'GET /admin/review/status':review.adminStatus,
+ 'POST /admin/review/issue':review.adminIssue,
+ 'POST /admin/review/revoke':review.adminRevoke,
  'POST /telegram/webhook':telegram.webhook,
  'POST /admin/telegram/configure':telegram.configureWebhook,
  'POST /admin/telegram/plan':telegram.setStarsPlan,
