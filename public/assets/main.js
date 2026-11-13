@@ -467,7 +467,66 @@ function friendCodesInit(){
  });
  friendCodesLoad();
 }
-async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);friendCodesInit();adminTelegramOrdersInit();adminStarsMonitorInit();attachStarsCronSecretGenerator();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();attachTelegramTestAlert();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);window.addEventListener('focus',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
+async function reviewLoad(){
+ const root=$('reviewRows');if(!root)return;
+ try{
+  const result=await api('/admin/review/status');
+  $('reviewAlertStatus').textContent=result.alertConfigured
+    ?'✅ تنبيهات تيليجرام مربوطة. راح يوصلك العدد إذا تجاوز 30.'
+    :'⚠️ تنبيهات تيليجرام مو مربوطة؛ اربط حسابك من قسم حماية بوت تيليجرام أدناه.';
+  const total=result.licenses.filter(x=>!x.revoked_at).reduce((v,x)=>v+x.activeSessions,0);
+  $('reviewStatus').textContent='الجلسات النشطة حالياً: '+total+' | حد التنبيه: '+result.threshold+
+   ' | الحساب يشمل أي جلسة تحققت خلال آخر '+Math.round(result.activeWindowSeconds/60)+' دقائق.';
+  root.replaceChildren();
+  if(!result.licenses.length){
+   const row=el('tr'),cell=el('td','ماكو كود مراجعة لحد الآن.');cell.colSpan=4;row.append(cell);root.append(row);return;
+  }
+  for(const license of result.licenses){
+   const row=el('tr');
+   addCell(row,license.label+' — '+license.id.slice(0,8));
+   addCell(row,license.activeSessions);
+   addCell(row,license.revoked_at?'ملغى':'نشط');
+   const actions=el('td');
+   if(!license.revoked_at){
+    const button=el('button','إلغاء كود المراجعة','btn ghost small');button.type='button';
+    button.addEventListener('click',async()=>{
+     if(!confirm('هذا يلغي كود المراجعة وجميع جلساته. هل متأكد؟'))return;
+     setBusy(button,true,'جارٍ الإلغاء...');
+     try{await post('/admin/review/revoke',{id:license.id});showToast('تم إلغاء ترخيص المراجعة');await reviewLoad()}
+     catch(err){openDialog('تعذر إلغاء ترخيص المراجعة',err.message)}
+     finally{setBusy(button,false)}
+    });
+    actions.append(button);
+   }else actions.textContent='—';
+   row.append(actions);root.append(row);
+  }
+ }catch(err){$('reviewStatus').textContent='تعذّر تحميل الحالة: '+err.message;}
+}
+function reviewInit(){
+ if(!$('reviewLicensePanel'))return;
+ $('reviewRefresh')?.addEventListener('click',reviewLoad);
+ $('reviewIssue')?.addEventListener('click',async()=>{
+  if(!confirm('إصدار كود خاص بمراجعة Google Play؟ إذا أكو كود نشط لازم تلغيه أولاً.'))return;
+  const button=$('reviewIssue');
+  $('reviewIssued').hidden=true;$('reviewCodeValue').value='';
+  setBusy(button,true,'جارٍ الإصدار...');
+  try{
+   const result=await post('/admin/review/issue',{label:'Google Play review'});
+   $('reviewCodeValue').value=result.code;
+   $('reviewIssued').hidden=false;
+   showToast('تم إصدار كود المراجعة. انسخه واحفظه داخل Play Console.');
+   await reviewLoad();
+  }catch(err){openDialog('تعذر إصدار كود المراجعة',err.message)}
+  finally{setBusy(button,false)}
+ });
+ $('reviewCopy')?.addEventListener('click',async()=>{
+  const input=$('reviewCodeValue');if(!input?.value)return;
+  try{await navigator.clipboard.writeText(input.value);showToast('تم نسخ كود المراجعة')}
+  catch{input.focus();input.select();showToast('حدد الكود وانسخه يدوياً')}
+ });
+ reviewLoad();
+}
+async function adminInit(){try{const data=await api('/admin/overview');$('adminAlert').textContent='تم التحقق من صلاحية المدير. التغييرات تُحفظ في قاعدة البيانات.';$('statUsers').textContent=data.counts.users;$('statActive').textContent=data.counts.active;$('statBound').textContent=data.counts.bound;users=data.users;renderUsers();renderPlans(data.plans);renderStarsAdmin(data.plans);friendCodesInit();reviewInit();adminTelegramOrdersInit();adminStarsMonitorInit();attachStarsCronSecretGenerator();adminTelegramSecurityInit();attachStarsMonitorControls();attachTelegramAlertPairing();attachWebhookSecretGenerator();attachTelegramTestAlert();$('adminRefreshTelegramSecurity')?.addEventListener('click',adminTelegramSecurityInit);window.addEventListener('focus',adminTelegramSecurityInit);const tb=$('adminOrders');tb.replaceChildren();data.orders.forEach(o=>{const tr=el('tr');[o.id.slice(0,17)+'…',o.email,names[o.plan_id]||o.plan_id,fmtMoney(o.amount_cents),o.status].forEach(text=>addCell(tr,text));tb.append(tr)});}catch(err){$('adminAlert').textContent=err.message+' — هذه الصفحة للمدير فقط.';$('adminAlert').className='alert warn';return}
 $('refreshTelegramPayments')?.addEventListener('click',adminTelegramOrdersInit);
 $('userSearch').addEventListener('input',renderUsers);
 async function doAction(path,payload,msg){if(!selected)return openDialog('اختر مستخدمًا','اختر المستخدم من جدول الحسابات أولًا');const reason=$('adminReason').value.trim();if(reason.length<5)return openDialog('السبب مطلوب','اكتب سببًا واضحًا لا يقل عن 5 أحرف');if(!confirm(tr(msg)+'\n'+tr('المستخدم')+': '+selected.email))return;try{await post(path,{userId:selected.id,reason,...payload});showToast('تم تنفيذ الإجراء');location.reload()}catch(err){openDialog('فشل الإجراء',err.message)}}
