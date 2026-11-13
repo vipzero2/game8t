@@ -4,7 +4,7 @@
 // Keystore-backed P-256 key. A Telegram ID typed by a client is never auth.
 import {body,fail,now,randomToken,sha256,uid,rateLimit,json,unbase64url,enc} from './common.js';
 import {entitlementEndSql} from './grants.js';
-import {tryActivateFriendCode} from './friend-codes.js';
+import {tryActivateFriendCode,ensureFriendCodeSchema} from './friend-codes.js';
 
 const codePattern=/^A8-[A-Za-z0-9_-]{28}$/;
 const telegramIdPattern=/^[1-9][0-9]{0,15}$/;
@@ -79,12 +79,33 @@ async function verifyProof(key,signature,text){
  }catch{return false}
 }
 export async function challenge(ctx){
- const d=await body(ctx.request),telegramId=validateId(d.telegramId);
+ const d=await body(ctx.request);
+ let telegramId=null;
+ // Before redemption the app knows only the one-time code. Resolve its
+ // owner server-side by its SHA-256 hash; never trust a client-typed Telegram ID.
+ if(typeof d.code==='string'){
+   const code=String(d.code).trim();
+   if(!codePattern.test(code))fail('INVALID_CODE','صيغة كود التفعيل غير صحيحة',400);
+   await ensureLicenseSchema(ctx.env);
+   const hash=await sha256(code),t=now();
+   const paid=await ctx.env.DB.prepare(
+     'SELECT telegram_user_id FROM telegram_device_codes WHERE code_hash=? AND used_at IS NULL AND expires_at>?'
+   ).bind(hash,t).first();
+   if(paid)telegramId=paid.telegram_user_id;
+   else {
+     await ensureFriendCodeSchema(ctx.env);
+     const gifted=await ctx.env.DB.prepare(
+       'SELECT telegram_user_id FROM friend_activation_codes WHERE code_hash=? AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at>?'
+     ).bind(hash,t).first();
+     if(gifted)telegramId=gifted.telegram_user_id;
+   }
+ }else telegramId=validateId(d.telegramId);
  const ip=ctx.request.headers.get('CF-Connecting-IP')||'local';
  await rateLimit(ctx.env,'telegram-device-challenge:'+ip,30,900);
- const account=await ctx.env.DB.prepare('SELECT user_id FROM telegram_accounts WHERE telegram_user_id=?').bind(telegramId).first();
+ const account=telegramId?await ctx.env.DB.prepare('SELECT user_id FROM telegram_accounts WHERE telegram_user_id=?')
+   .bind(telegramId).first():null;
  const challengeId=uid(),nonce=randomToken(32);
- // Same response for unknown Telegram IDs to avoid account enumeration.
+ // Uniform response to prevent enumeration of accounts/codes.
  if(account)await ctx.env.DB.prepare('INSERT INTO device_challenges(id,user_id,nonce,expires_at) VALUES(?,?,?,?)')
    .bind(challengeId,account.user_id,nonce,now()+CHALLENGE_LIFETIME).run();
  return json({ok:true,challengeId,nonce,expiresIn:CHALLENGE_LIFETIME,algorithm:'ECDSA_P256_SHA256_P1363'});
