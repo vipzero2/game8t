@@ -40,6 +40,25 @@
  <div class="friend-history-title"><h3>آخر الأكواد</h3><button id="friendRefreshButton" class="btn ghost small" type="button">تحديث السجل</button></div>
  <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Telegram ID</th><th>الباقة</th><th>الحالة</th><th>انتهاء الكود</th><th>إجراء</th></tr></thead><tbody id="friendCodeRows"><tr><td colspan="5">جارٍ تحميل السجل...</td></tr></tbody></table></div>
 </section>
+<section class="glass" id="reviewLicensePanel" style="margin-bottom:24px">
+ <h2>🔐 كود مراجعة Google Play</h2>
+ <p>كود قابل لإعادة الاستخدام على أي جهاز، بدون ربط أو استهلاك عند الاستخدام. السيرفر يحسب الجلسات النشطة آخر 6 دقائق ويرسل تنبيهاً إذا تجاوز العدد 30. لا يمنع المراجعين تلقائياً.</p>
+ <div class="page-actions">
+  <button type="button" class="btn" id="reviewIssue">إصدار كود مراجعة</button>
+  <button type="button" class="btn ghost" id="reviewRefresh">تحديث عدد الجلسات</button>
+ </div>
+ <p id="reviewStatus" role="status" aria-live="polite">جاري تحميل الحالة...</p>
+ <p id="reviewAlertStatus" class="form-note"></p>
+ <div id="reviewIssued" hidden>
+  <label for="reviewCodeValue">الكود الجديد — يظهر مرة واحدة فقط؛ انسخه داخل Play Console → App access</label>
+  <div class="friend-code-copy"><input id="reviewCodeValue" type="text" readonly autocomplete="off"><button type="button" class="btn ghost small" id="reviewCopy">نسخ</button></div>
+ </div>
+ <div class="admin-table-wrap"><table class="admin-table">
+  <thead><tr><th>الترخيص</th><th>الجلسات النشطة حالياً</th><th>الحالة</th><th>الإجراء</th></tr></thead>
+  <tbody id="reviewRows"><tr><td colspan="4">جارٍ تحميل الحالة...</td></tr></tbody>
+ </table></div>
+ <p class="form-note">إذا ألغيت الكود، توقف جميع جلساته عند التحقق التالي. عند تغيير بيانات المراجعة حدّث App access في Play Console حتى لا تتعطل مراجعات Google القادمة.</p>
+</section>
 <details class="admin-advanced" id="adminSecurityAdvanced"><summary>🛡️ الأمان والفحص التلقائي <span>إعدادات متقدمة</span></summary>
 <section class="glass" style="margin-bottom:24px;border-color:#377b79" id="starsMonitor">
 <h2>حماية استرجاع النجوم الخارجي</h2>
@@ -116,4 +135,4 @@
 </div><div class="footer-bottom"><span>© <span id="currentYear">2026</span> AIM8 — جميع الحقوق محفوظة</span><span>موقع مستقل، غير مرتبط رسميًا باللعبة · 8aim.site</span></div></div></footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="infoDialog" class="modal"><h3 id="dialogTitle">ملاحظة</h3><p id="dialogBody">الميزة قيد التجهيز</p><div class="modal-actions"><button class="btn small" type="button" id="dialogClose">حسنًا</button></div></dialog>
-<script src="assets/main.js?v=friendcodes-20261112" defer></script></body></html>
+<script src="assets/main.js?v=review-20261113" defer></script></body></html>
