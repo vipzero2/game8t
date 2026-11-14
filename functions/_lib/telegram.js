@@ -4,6 +4,7 @@ import {telegramText} from './telegram-locale.js';
 import {ensureTelegramAccount,ensureLicenseSchema,issuePaidCode,recoverCode} from './telegram-license.js';
 import {getBotLanguage,setBotLanguage,languagePicker,t,planLabel,codeKeyboard} from './telegram-bot-ui.js';
 import {beginWebhookUpdate,completeWebhookUpdate,failWebhookUpdate,enforceBotLimit,securityEvent,completeAlertPairing,createAlertPairing} from './telegram-security.js';
+import {completeCryptoIdentity} from './nowpayments-identity.js';
 
 const site = 'https://8aim.site';
 
@@ -208,6 +209,12 @@ async function onStart(env, message, token) {
     return send(env,chat,success
       ?'🛡️ تم ربط حسابك بنجاح! تنبيهات حماية AIM8 سوف تصلك هنا عند رصد محاولات مشبوهة.'
       :'رابط تنبيهات الحماية غير صالح أو مستخدم أو انتهت صلاحيته. اطلب رابطاً جديداً من لوحة إدارة AIM8.',null,message.from);
+  }
+  if(/^npv_[A-Za-z0-9_-]{32}$/.test(token)){
+    const ok=await completeCryptoIdentity(env,token.slice(4),message.from,chat);
+    return send(env,chat,ok
+      ?'✅ تم تأكيد Telegram ID الخاص بك لشراء العملات الرقمية عبر موقع AIM8. ارجع الآن لصفحة الموقع لإكمال طلبك. الدفع بالنجوم منفصل.'
+      :'رمز التحقق من Telegram ID انتهت صلاحيته أو استُخدم. افتح طلب تحقق جديد من الموقع.',null,message.from);
   }
   if (!token) {
     await ensureTelegramAccount(env,tgId,chat,message.from);
