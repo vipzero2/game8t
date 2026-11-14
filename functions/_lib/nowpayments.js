@@ -13,8 +13,9 @@ export const CRYPTO_PLANS=Object.freeze({
  year:{days:365,cents:1000,label:'1 Year'}
 });
 const API='https://api.nowpayments.io/v1';
-function ready(env){
- if(env.NOWPAYMENTS_ENABLED!=='true'||!env.NOWPAYMENTS_API_KEY||!env.NOWPAYMENTS_IPN_SECRET||!env.SESSION_SECRET)
+function ready(env,newSales=false){
+ // Pausing new checkouts must not abandon already-issued and paid invoices.
+ if((newSales&&env.NOWPAYMENTS_ENABLED!=='true')||!env.NOWPAYMENTS_API_KEY||!env.NOWPAYMENTS_IPN_SECRET||!env.SESSION_SECRET)
   fail('NOWPAYMENTS_DISABLED','بوابة NOWPayments غير جاهزة',503);
 }
 function officialInvoiceUrl(value){
@@ -38,7 +39,7 @@ async function upstream(env,path,options={}){
 }
 
 export async function createCryptoInvoice(ctx){
- ready(ctx.env);
+ ready(ctx.env,true);
  const d=await body(ctx.request),planId=String(d.planId||'');
  const plan=CRYPTO_PLANS[planId];
  if(!Object.prototype.hasOwnProperty.call(CRYPTO_PLANS,planId))
