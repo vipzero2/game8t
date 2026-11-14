@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080e1a">
+<meta name="referrer" content="no-referrer">
+<title>الدفع بالعملات الرقمية | AIM8</title>
+<link rel="stylesheet" href="/assets/style.css"><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+</head>
+<body>
+<div class="notice-bar">AIM8 · NOWPayments · شراء العملات الرقمية</div>
+<header class="site-header"><div class="container nav"><a class="brand" href="/index.html">
+<span class="brand-orb"><b>8</b></span><span class="brand-word">AIM<span>8</span></span></a>
+<nav class="nav-links"><a href="/index.html">الرئيسية</a><a href="/support.html">الدعم</a></nav></div></header>
+<main><div class="container" style="max-width:780px;padding:52px 16px 90px">
+<div class="page-top"><span class="eyebrow">NOWPayments</span><h1>اشتراك AIM8 بالعملات الرقمية</h1>
+<p>اختَر الباقة وادفع بأي عملة مدعومة. يتم إرسال كود التفعيل إلى Telegram ID الذي تثبت ملكيته عبر بوت AIM8. الدفع بالنجوم مستقل تماماً.</p></div>
+<section class="glass" style="margin:22px 0;padding:24px">
+<h2>1. تحقق من Telegram ID</h2>
+<p>لن نطلب اسمك أو إيميلك. فقط افتح بوت AIM8 من رابط تحقق خاص؛ لا يمكن تفعيل اشتراك باستخدام ID شخص آخر.</p>
+<button class="btn" id="startVerification" type="button">بدء التحقق من Telegram ID</button>
+<a class="btn ghost" id="telegramVerification" href="#" rel="noreferrer" target="_blank" hidden>فتح بوت تيليجرام للتحقق</a>
+<p id="verificationCode" dir="ltr" class="form-note"></p>
+<p id="verificationStatus" class="form-note" role="status" aria-live="polite"></p>
+</section>
+<section class="glass" style="padding:24px">
+<h2>2. اختر الباقة</h2><p>الأسعار ثابتة بالدولار، وسعر العملة المشفرة يتغير وفق السوق. السعر الثابت للعملات (Fixed Rate) غير مفعّل.</p>
+<div class="plans" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+<div class="mini-card"><h3>3 أشهر</h3><p><strong>$4 USD</strong></p><button class="btn full crypto-plan" type="button" data-plan="quarter" disabled>شراء 90 يوم</button></div>
+<div class="mini-card"><h3>6 أشهر</h3><p><strong>$6 USD</strong></p><button class="btn full crypto-plan" type="button" data-plan="half" disabled>شراء 180 يوم</button></div>
+<div class="mini-card"><h3>سنة كاملة</h3><p><strong>$10 USD</strong></p><button class="btn full crypto-plan" type="button" data-plan="year" disabled>شراء 365 يوم</button></div>
+</div>
+<p id="checkoutStatus" class="form-note" role="status" aria-live="polite"></p>
+<a id="paymentLink" class="btn full" target="_blank" rel="noreferrer noopener" href="#" hidden>فتح فاتورة NOWPayments</a>
+<button class="btn ghost" id="refreshOrder" type="button" hidden>تحقق من حالة الدفع</button>
+</section>
+<p class="muted" style="margin-top:20px">إتمام الدفع لا يفعّل الاشتراك بحد ذاته. بعد تأكيد العملية من NOWPayments يصلك كود لمدة 24 ساعة عبر رسالة خاصة من البوت، ويُستخدم في تطبيق AIM8 لمرة واحدة. لا تشارك كودك.</p>
+</div></main>
+<footer class="footer"><div class="container"><div class="footer-bottom">© AIM8 — جميع الحقوق محفوظة · 8aim.site</div></div></footer>
+<script src="/assets/crypto.js" defer></script>
+</body></html>
