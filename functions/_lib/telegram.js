@@ -213,7 +213,7 @@ async function onStart(env, message, token) {
   if(/^npv_[A-Za-z0-9_-]{32}$/.test(token)){
     const ok=await completeCryptoIdentity(env,token.slice(4),message.from,chat);
     return send(env,chat,ok
-      ?'✅ تم تأكيد Telegram ID الخاص بك لشراء العملات الرقمية عبر موقع AIM8. ارجع الآن لصفحة الموقع لإكمال طلبك. الدفع بالنجوم منفصل.'
+      ?'✅ تم تأكيد ملكية Telegram ID بنجاح. رمز التحقق مرتبط بهذا الحساب فقط.'
       :'رمز التحقق من Telegram ID انتهت صلاحيته أو استُخدم. افتح طلب تحقق جديد من الموقع.',null,message.from);
   }
   if (!token) {
