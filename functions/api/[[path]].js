@@ -11,9 +11,16 @@ import * as review from '../_lib/review-license.js';
 import * as starsMonitor from '../_lib/stars-monitor.js';
 import * as friendCodes from '../_lib/friend-codes.js';
 import * as telegramSecurity from '../_lib/telegram-security.js';
+import * as nowpayments from '../_lib/nowpayments.js';
+import * as nowpaymentsIdentity from '../_lib/nowpayments-identity.js';
 import {authorizedScheduledRun} from '../_lib/scheduler-identity.js';
 const endpoints={
  'GET /config':payment.plans,
+ 'POST /nowpayments/identity/start':nowpaymentsIdentity.startCryptoIdentity,
+ 'POST /nowpayments/identity/status':nowpaymentsIdentity.identityStatus,
+ 'POST /nowpayments/invoice':nowpayments.createCryptoInvoice,
+ 'POST /nowpayments/order/status':nowpayments.cryptoInvoiceStatus,
+ 'POST /nowpayments/webhook':nowpayments.nowpaymentsWebhook,
  'GET /telegram/open':telegram.openBot,
  'POST /telegram/link':telegram.startLink,
  'POST /telegram/redeem':telegram.redeem,
@@ -73,4 +80,4 @@ const endpoints={
  'POST /admin/plan':admin.setPlan,
  'POST /admin/block':admin.block
 };
-export async function onRequest(ctx){try{assertDb(ctx.env);const url=new URL(ctx.request.url);const path='/'+(Array.isArray(ctx.params.path)?ctx.params.path.join('/'):(ctx.params.path||''));if(ctx.request.method!=='GET'&&path!=='/payments/webhook'&&path!=='/telegram/webhook')siteOrigin(ctx.request);const fn=endpoints[ctx.request.method+' '+path];if(!fn)return json({ok:false,error:'NOT_FOUND',message:'المسار غير موجود'},404);return await fn(ctx);}catch(e){if(e instanceof ApiError)return json({ok:false,error:e.code,message:e.message},e.status);console.error('AIM8 API failed:',e?.message||e);return json({ok:false,error:'SERVER_ERROR',message:'حصل خطأ داخلي؛ تحقق من إعدادات السيرفر'},500)}}
+export async function onRequest(ctx){try{assertDb(ctx.env);const url=new URL(ctx.request.url);const path='/'+(Array.isArray(ctx.params.path)?ctx.params.path.join('/'):(ctx.params.path||''));if(ctx.request.method!=='GET'&&path!=='/payments/webhook'&&path!=='/telegram/webhook'&&path!=='/nowpayments/webhook')siteOrigin(ctx.request);const fn=endpoints[ctx.request.method+' '+path];if(!fn)return json({ok:false,error:'NOT_FOUND',message:'المسار غير موجود'},404);return await fn(ctx);}catch(e){if(e instanceof ApiError)return json({ok:false,error:e.code,message:e.message},e.status);console.error('AIM8 API failed:',e?.message||e);return json({ok:false,error:'SERVER_ERROR',message:'حصل خطأ داخلي؛ تحقق من إعدادات السيرفر'},500)}}
