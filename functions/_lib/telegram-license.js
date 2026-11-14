@@ -57,7 +57,7 @@ export async function recoverCode(env,tg,chat){
  if(!account||account.chat_id!==chatId||account.blocked)fail('NO_TELEGRAM_ACCOUNT','الحساب غير موجود أو موقوف',403);
  const canRecover=account.subscription_until>now()||
   await env.DB.prepare("SELECT id FROM telegram_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(account.user_id).first()||
-  await env.DB.prepare("SELECT id FROM nowpayments_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(account.user_id).first();
+  (env.NOWPAYMENTS_ENABLED==='true' && await env.DB.prepare("SELECT id FROM nowpayments_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(account.user_id).first());
  if(!canRecover)fail('NO_ACTIVE_LICENSE','ما عندك اشتراك مدفوع صالح للاسترجاع',409);
  await rateLimit(env,'telegram:recover:'+telegramId,5,86400);
  const code='A8-'+randomToken(21),hash=await sha256(code),t=now();
@@ -139,7 +139,8 @@ export async function activate(ctx){
  if(!await verifyProof(key,signature,`AIM8:telegram:activate:${challengeId}:${cr.nonce}`))
   fail('BAD_SIGNATURE','توقيع الجهاز غير صحيح',401);
  const pending=await ctx.env.DB.prepare("SELECT id FROM telegram_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(user.id).first();
- const pendingCrypto=await ctx.env.DB.prepare("SELECT id FROM nowpayments_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(user.id).first();
+ const cryptoEnabled=ctx.env.NOWPAYMENTS_ENABLED==='true';
+ const pendingCrypto=cryptoEnabled?await ctx.env.DB.prepare("SELECT id FROM nowpayments_orders WHERE user_id=? AND status='paid' LIMIT 1").bind(user.id).first():null;
  if(user.subscription_until<=now()&&!pending&&!pendingCrypto)fail('SUBSCRIPTION_REQUIRED','ما عندك اشتراك فعّال',403);
  const t=now(),nonce=uid();
  const rows=await ctx.env.DB.batch([
@@ -151,17 +152,18 @@ export async function activate(ctx){
    .bind(t,user.id,hash,nonce),
   ctx.env.DB.prepare("UPDATE telegram_orders SET status='redeemed',redeemed_at=? WHERE user_id=? AND status='paid' AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
    .bind(t,user.id,hash,nonce),
-  ctx.env.DB.prepare("INSERT OR IGNORE INTO subscription_grants(id,user_id,source,source_id,granted_at,duration_seconds) SELECT 'np:'||id,user_id,'nowpayments',id,?,duration_days*86400 FROM nowpayments_orders WHERE user_id=? AND status='paid' AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
+  ...(cryptoEnabled?[ctx.env.DB.prepare("INSERT OR IGNORE INTO subscription_grants(id,user_id,source,source_id,granted_at,duration_seconds) SELECT 'np:'||id,user_id,'nowpayments',id,?,duration_days*86400 FROM nowpayments_orders WHERE user_id=? AND status='paid' AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
    .bind(t,user.id,hash,nonce),
   ctx.env.DB.prepare("UPDATE nowpayments_orders SET status='redeemed',redeemed_at=? WHERE user_id=? AND status='paid' AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
-   .bind(t,user.id,hash,nonce),
+   .bind(t,user.id,hash,nonce)]:[]),
   ctx.env.DB.prepare("UPDATE users SET device_public_key=?,device_bound_at=?,subscription_started_at=COALESCE(subscription_started_at,?),subscription_until="+entitlementEndSql+
    " WHERE id=? AND blocked=0 AND (device_public_key IS NULL OR device_public_key=?) AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
    .bind(key,t,t,user.id,key,hash,nonce),
   ctx.env.DB.prepare("DELETE FROM device_challenges WHERE id=? AND user_id=? AND expires_at>? AND EXISTS(SELECT 1 FROM telegram_device_codes WHERE code_hash=? AND used_nonce=?)")
    .bind(challengeId,user.id,t,hash,nonce)
  ]);
- if(rows[0]?.meta?.changes!==1||rows[6]?.meta?.changes!==1||rows[7]?.meta?.changes!==1)
+ const updateIndex=cryptoEnabled?6:4;
+ if(rows[0]?.meta?.changes!==1||rows[updateIndex]?.meta?.changes!==1||rows[updateIndex+1]?.meta?.changes!==1)
   fail('ACTIVATION_FAILED','تعذر تفعيل الكود أو الجهاز؛ اطلب كوداً جديداً من البوت',409);
  const updated=await ctx.env.DB.prepare('SELECT subscription_until FROM users WHERE id=?').bind(user.id).first();
  return json({ok:true,telegramId:codeRow.telegram_user_id,deviceAccepted:true,subscriptionUntil:updated.subscription_until,serverTime:now(),nextCheckSeconds:300});
