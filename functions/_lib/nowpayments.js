@@ -148,12 +148,14 @@ async function deliver(env,order){
  const code=await codeFor(env,order),hash=await sha256(code);
  if(hash!==order.code_hash)fail('CODE_INTEGRITY','تعذر التحقق من الكود',503);
  let current=await env.DB.prepare(
-  'SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?'
+  'SELECT code_hash,used_at,expires_at,created_at FROM telegram_device_codes WHERE telegram_user_id=?'
  ).bind(order.telegram_user_id).first();
- if(!current){
+ // Replace only an older code. Never overwrite a newer payment or
+ // /recover code if this IPN was delayed and arrived out of order.
+ if(!current||(current.code_hash!==hash&&current.created_at<order.paid_at)){
   await issuePaidCode(env,order.telegram_user_id,order.user_id,code);
   current=await env.DB.prepare(
-   'SELECT code_hash,used_at,expires_at FROM telegram_device_codes WHERE telegram_user_id=?'
+   'SELECT code_hash,used_at,expires_at,created_at FROM telegram_device_codes WHERE telegram_user_id=?'
   ).bind(order.telegram_user_id).first();
  }
  if(current?.code_hash!==hash){
@@ -186,7 +188,7 @@ async function finishPayment(env,order,paymentId){
 }
 async function refundPayment(env,order,paymentId){
  if(order.payment_id!==paymentId||!['paid','redeemed'].includes(order.status))return;
- const t=now(),nonce=uid();
+ const t=now();
  await env.DB.batch([
   env.DB.prepare(
    "UPDATE nowpayments_orders SET status='refunded',refunded_at=? WHERE id=? AND payment_id=? AND status IN ('paid','redeemed')"
